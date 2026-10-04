@@ -30,4 +30,4 @@ $$
 N(k) = \sum_j \eta(j;k),
 $$
 
-is expected to exhibit three qualitatively different behaviors: explosion, stagnation, or extinction. In this study, I will run simulations for different values of $p$ and $q$ and investigate the resulting phase diagram in the $p$-$q$ parameter space.
+is expected to exhibit three qualitatively different behaviors: explosion, stagnation, or extinction. In this study, I will run simulations for different values of $p$ and $q$ and investigate the resulting phase diagram in the $p$ - $q$ parameter space.
