@@ -1,6 +1,6 @@
 # Cellular Automaton Simulation And Phase Transition
 
-A study to observe a phase transition in a particular cellular automaton model.
+A study to observe a phase transition in **Domany-Kinzel cellular automaton(DKCA)**[\[1\]](https://github.com/Koe-eigh/ca-phase-transition#reference) type
 
 ## The Idea
 
@@ -31,3 +31,6 @@ N(k) = \sum_j \eta(j;k),
 $$
 
 is expected to exhibit three qualitatively different behaviors: explosion, stagnation, or extinction. In this study, I will run simulations for different values of $p$ and $q$ and investigate the resulting phase diagram in the $p$ - $q$ parameter space.
+
+## Reference
+- [1] E. Domany and W. Kinzel, Phys. Rev. Lett. 53, 447 (1984).
