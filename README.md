@@ -1,6 +1,6 @@
 # Cellular Automaton Simulation And Phase Transition
 
-A study to observe a phase transition in **Domany-Kinzel cellular automaton(DKCA)**[\[1\]](https://github.com/Koe-eigh/ca-phase-transition#reference) type
+A study to observe a phase transition in the simple **Domany-Kinzel cellular automaton(DKCA)**[\[1\]](https://github.com/Koe-eigh/ca-phase-transition#reference) model.
 
 ## The Idea
 
