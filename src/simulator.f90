@@ -52,7 +52,7 @@ contains
         context%grid_size = grid_size
 
         if (p_steps <= 0 .or. q_steps <= 0 .or. max_steps < 0 .or. grid_size <= 0) then
-            error stop 'SimulationContext: dimensions must be positive'
+            error stop 'Invalid simulation context'
         end if
 
         allocate(context%p_values(p_steps), context%q_values(q_steps))
@@ -101,10 +101,12 @@ contains
         do iq = 1, sim%context%q_steps
             do ip = 1, sim%context%p_steps
                 call sim%model%reset()
-                simulation_result%active_count(0, ip, iq) = sum(sim%model%state)
+                simulation_result%active_count(0, ip, iq) = &
+                    sim%model%current_active_count()
                 do it = 1, sim%context%max_steps
+                    call sim%model%step(sim%context%p_values(ip), sim%context%q_values(iq))
                     simulation_result%active_count(it, ip, iq) = &
-                        sim%model%step(sim%context%p_values(ip), sim%context%q_values(iq))
+                        sim%model%current_active_count()
                 end do
             end do
         end do

@@ -12,6 +12,8 @@ module model
     contains
         procedure :: reset
         procedure :: step
+        procedure :: current_active_count
+        procedure, private :: periodic_index
     end type DKCA_t
 
     interface DKCA
@@ -33,17 +35,16 @@ contains
         dkca%state = dkca%initial_state
     end subroutine reset
 
-    function step(dkca, p, q) result(active_count)
+    subroutine step(dkca, p, q)
         class(DKCA_t), intent(inout) :: dkca
         real, intent(in) :: p, q
-        integer(kind=int32) :: active_count
 
         integer(kind=int32) :: j, left, right
         real :: probability, random_value
 
         do j = lbound(dkca%state, 1), ubound(dkca%state, 1)
-            left = dkca%state(periodic_index(j - 1, dkca%state))
-            right = dkca%state(periodic_index(j + 1, dkca%state))
+            left = dkca%state(dkca%periodic_index(j - 1))
+            right = dkca%state(dkca%periodic_index(j + 1))
 
             if (left == 0 .and. right == 0) then
                 probability = 0.0
@@ -54,21 +55,27 @@ contains
             end if
 
             call random_number(random_value)
-            dkca%next_state(j) = merge(1_int32, 0_int32, random_value < probability)
+            dkca%next_state(j) = (random_value < probability ? 1_int32 : 0_int32)
         end do
 
         dkca%state = dkca%next_state
-        active_count = sum(dkca%state)
-    end function step
+    end subroutine step
 
-    pure function periodic_index(index, state) result(wrapped_index)
+    function current_active_count(dkca) result(active_count)
+        class(DKCA_t), intent(in) :: dkca
+        integer(kind=int32) :: active_count
+
+        active_count = sum(dkca%state)
+    end function current_active_count
+
+    function periodic_index(dkca, index) result(wrapped_index)
+        class(DKCA_t), intent(in) :: dkca
         integer(kind=int32), intent(in) :: index
-        integer(kind=int32), intent(in) :: state(:)
         integer(kind=int32) :: wrapped_index
         integer(kind=int32) :: first, n
 
-        first = lbound(state, 1)
-        n = int(size(state), kind=int32)
+        first = lbound(dkca%state, 1)
+        n = int(size(dkca%state), kind=int32)
         wrapped_index = first + modulo(index - first, n)
     end function periodic_index
 
