@@ -16,8 +16,8 @@ module simulator_module
         integer(kind=int32) :: max_steps
         integer(kind=int32) :: grid_size
         integer(kind=int32) :: simulation_count
-        real, allocatable :: p_values(:)
-        real, allocatable :: q_values(:)
+        real(real64), allocatable :: p_values(:)
+        real(real64), allocatable :: q_values(:)
     end type SimulationContext_t
 
     interface SimulationContext
@@ -63,14 +63,14 @@ contains
 
         allocate(context%p_values(p_steps), context%q_values(q_steps))
         if (p_steps == 1) then
-            context%p_values = 0.0
+            context%p_values = 0.0_real64
         else
-            context%p_values = [(real(i - 1) / real(p_steps - 1), i = 1, p_steps)]
+            context%p_values = [(real(i - 1, real64) / real(p_steps - 1, real64), i = 1, p_steps)]
         end if
         if (q_steps == 1) then
-            context%q_values = 0.0
+            context%q_values = 0.0_real64
         else
-            context%q_values = [(real(i - 1) / real(q_steps - 1), i = 1, q_steps)]
+            context%q_values = [(real(i - 1, real64) / real(q_steps - 1, real64), i = 1, q_steps)]
         end if
     end function init_context
 

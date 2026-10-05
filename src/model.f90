@@ -1,5 +1,5 @@
 module model
-    use, intrinsic :: iso_fortran_env, only: int32
+    use, intrinsic :: iso_fortran_env, only: int32, real64
     implicit none
     private
 
@@ -37,11 +37,11 @@ contains
 
     subroutine step(dkca, p, q, active_count)
         class(DKCA_t), intent(inout) :: dkca
-        real, intent(in) :: p, q
+        real(real64), intent(in) :: p, q
         integer(kind=int32), intent(out), optional :: active_count
 
         integer(kind=int32) :: j, left, right, next_active_count
-        real :: probability, random_value
+        real(real64) :: probability, random_value
 
         next_active_count = 0_int32
         do j = lbound(dkca%state, 1), ubound(dkca%state, 1)
@@ -49,7 +49,7 @@ contains
             right = dkca%state(dkca%periodic_index(j + 1))
 
             if (left == 0 .and. right == 0) then
-                probability = 0.0
+                probability = 0.0_real64
             else if (left == 1 .and. right == 1) then
                 probability = q
             else
