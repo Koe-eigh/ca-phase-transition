@@ -32,5 +32,22 @@ $$
 
 is expected to exhibit three qualitatively different behaviors: explosion, stagnation, or extinction. In this study, I will run simulations for different values of $p$ and $q$ and investigate the resulting phase diagram in the $p$ - $q$ parameter space.
 
+## Usage
+
+Build and run the simulation with the default settings:
+
+```sh
+fpm run
+```
+
+The simulation parameters can be supplied as positional command-line arguments in
+the order `p_steps q_steps max_steps grid_size`:
+
+```sh
+fpm run -- 21 21 200 200
+```
+
+If no arguments are supplied, the values above are used by default.
+
 ## Reference
 - [1] E. Domany and W. Kinzel, Phys. Rev. Lett. 53, 447 (1984).
