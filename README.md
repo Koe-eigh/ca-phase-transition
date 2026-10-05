@@ -16,13 +16,15 @@ P\left(
 =
 \begin{cases}
 0,   & (\eta(j-1;k-1),\eta(j+1;k-1))=(0,0),\\
-1-p, & (\eta(j-1;k-1),\eta(j+1;k-1))=(1,0),\\
-1-p, & (\eta(j-1;k-1),\eta(j+1;k-1))=(0,1),\\
-1-q, & (\eta(j-1;k-1),\eta(j+1;k-1))=(1,1).
+p, & (\eta(j-1;k-1),\eta(j+1;k-1))=(1,0),\\
+p, & (\eta(j-1;k-1),\eta(j+1;k-1))=(0,1),\\
+q, & (\eta(j-1;k-1),\eta(j+1;k-1))=(1,1).
 \end{cases}
 
 ```
-The probability that $\eta(j;k)=0$ is given by the complementary probability.
+Here, $p$ and $q$ are the probabilities that the site becomes active for the
+mixed-neighbor and two-active-neighbor cases, respectively. The probability
+that $\eta(j;k)=0$ is given by the complementary probability.
 
 Depending on $p$ and $q$, the total number of active sites,
 
@@ -51,13 +53,15 @@ OMP_NUM_THREADS=8 fpm run --profile release
 ```
 
 The simulation parameters can be supplied as positional command-line arguments in
-the order `p_steps q_steps max_steps grid_size`:
+the order `p_steps q_steps max_steps grid_size simulation_count`:
 
 ```sh
-fpm run -- 21 21 200 200
+fpm run --profile release -- 21 21 200 200 10
 ```
 
-If no arguments are supplied, the values above are used by default.
+`simulation_count` controls how many independent simulations are averaged for
+each `(p, q)` combination. If it is omitted, one simulation is run.
+If no arguments are supplied, the default values above are used.
 
 ## Reference
 - [1] E. Domany and W. Kinzel, Phys. Rev. Lett. 53, 447 (1984).

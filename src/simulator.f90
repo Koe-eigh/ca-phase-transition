@@ -1,5 +1,5 @@
 module simulator_module
-    use, intrinsic :: iso_fortran_env, only: int32
+    use, intrinsic :: iso_fortran_env, only: int32, real64
     use omp_lib, only: omp_get_max_threads
     use model, only: DKCA_t, DKCA
     implicit none
@@ -15,6 +15,7 @@ module simulator_module
         integer(kind=int32) :: q_steps
         integer(kind=int32) :: max_steps
         integer(kind=int32) :: grid_size
+        integer(kind=int32) :: simulation_count
         real, allocatable :: p_values(:)
         real, allocatable :: q_values(:)
     end type SimulationContext_t
@@ -34,7 +35,7 @@ module simulator_module
     ! The first dimension is the time step. p and q are represented by
     ! their indices in the parameter sweep.
     type :: SimulationResult_t
-        integer(kind=int32), allocatable :: active_count(:, :, :)
+        real(real64), allocatable :: active_count(:, :, :)
     end type SimulationResult_t
 
     interface Simulator
@@ -42,8 +43,9 @@ module simulator_module
     end interface Simulator
 
 contains
-    function init_context(p_steps, q_steps, max_steps, grid_size) result(context)
+    function init_context(p_steps, q_steps, max_steps, grid_size, simulation_count) result(context)
         integer(kind=int32), intent(in) :: p_steps, q_steps, max_steps, grid_size
+        integer(kind=int32), intent(in), optional :: simulation_count
         type(SimulationContext_t) :: context
         integer(kind=int32) :: i
 
@@ -51,8 +53,11 @@ contains
         context%q_steps = q_steps
         context%max_steps = max_steps
         context%grid_size = grid_size
+        context%simulation_count = 1_int32
+        if (present(simulation_count)) context%simulation_count = simulation_count
 
-        if (p_steps <= 0 .or. q_steps <= 0 .or. max_steps < 0 .or. grid_size <= 0) then
+        if (p_steps <= 0 .or. q_steps <= 0 .or. max_steps < 0 .or. grid_size <= 0 .or. &
+            context%simulation_count <= 0) then
             error stop 'Invalid simulation context'
         end if
 
@@ -94,12 +99,13 @@ contains
         class(Simulator_t), intent(inout) :: sim
         type(SimulationResult_t) :: simulation_result
         type(DKCA_t) :: local_model
-        integer(kind=int32) :: it, ip, iq
+        integer(kind=int32) :: it, ip, iq, isim, active_count
         integer :: total_patterns, worker_count
 
         allocate(simulation_result%active_count(0:sim%context%max_steps, &
                                                 sim%context%p_steps, &
                                                 sim%context%q_steps))
+        simulation_result%active_count = 0.0_real64
 
         ! Every (p, q) run is independent.  Use one worker per pattern when
         ! possible, while respecting the configured OpenMP thread limit.
@@ -111,18 +117,32 @@ contains
         ! distinct (time, p, q) region of the shared result array.
         !$omp parallel do collapse(2) schedule(static) &
         !$omp& num_threads(worker_count) &
-        !$omp& private(local_model, it, ip, iq) shared(sim, simulation_result)
+        !$omp& private(local_model, it, ip, iq, isim, active_count) &
+        !$omp& shared(sim, simulation_result)
         do iq = 1, sim%context%q_steps
             do ip = 1, sim%context%p_steps
+                ! The model arrays are allocated/copied once per parameter
+                ! combination and then reused for all Monte Carlo trials.
                 local_model = sim%model
-                call local_model%reset()
-                simulation_result%active_count(0, ip, iq) = &
-                    local_model%current_active_count()
-                do it = 1, sim%context%max_steps
-                    call local_model%step(sim%context%p_values(ip), sim%context%q_values(iq))
-                    simulation_result%active_count(it, ip, iq) = &
-                        local_model%current_active_count()
+                do isim = 1, sim%context%simulation_count
+                    call local_model%reset()
+                    simulation_result%active_count(0, ip, iq) = &
+                        simulation_result%active_count(0, ip, iq) + &
+                        real(local_model%current_active_count(), real64)
+                    do it = 1, sim%context%max_steps
+                        call local_model%step(sim%context%p_values(ip), sim%context%q_values(iq), &
+                                              active_count)
+                        simulation_result%active_count(it, ip, iq) = &
+                            simulation_result%active_count(it, ip, iq) + &
+                            real(active_count, real64)
+                        ! The all-zero state is absorbing, so later time
+                        ! steps remain zero and do not need to be simulated.
+                        if (active_count == 0_int32) exit
+                    end do
                 end do
+                simulation_result%active_count(:, ip, iq) = &
+                    simulation_result%active_count(:, ip, iq) / &
+                    real(sim%context%simulation_count, real64)
             end do
         end do
         !$omp end parallel do

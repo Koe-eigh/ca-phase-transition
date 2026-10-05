@@ -35,13 +35,15 @@ contains
         dkca%state = dkca%initial_state
     end subroutine reset
 
-    subroutine step(dkca, p, q)
+    subroutine step(dkca, p, q, active_count)
         class(DKCA_t), intent(inout) :: dkca
         real, intent(in) :: p, q
+        integer(kind=int32), intent(out), optional :: active_count
 
-        integer(kind=int32) :: j, left, right
+        integer(kind=int32) :: j, left, right, next_active_count
         real :: probability, random_value
 
+        next_active_count = 0_int32
         do j = lbound(dkca%state, 1), ubound(dkca%state, 1)
             left = dkca%state(dkca%periodic_index(j - 1))
             right = dkca%state(dkca%periodic_index(j + 1))
@@ -49,16 +51,18 @@ contains
             if (left == 0 .and. right == 0) then
                 probability = 0.0
             else if (left == 1 .and. right == 1) then
-                probability = 1.0 - q
+                probability = q
             else
-                probability = 1.0 - p
+                probability = p
             end if
 
             call random_number(random_value)
             dkca%next_state(j) = (random_value < probability ? 1_int32 : 0_int32)
+            next_active_count = next_active_count + dkca%next_state(j)
         end do
 
         dkca%state = dkca%next_state
+        if (present(active_count)) active_count = next_active_count
     end subroutine step
 
     function current_active_count(dkca) result(active_count)

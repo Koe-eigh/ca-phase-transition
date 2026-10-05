@@ -9,16 +9,17 @@ program main
     integer(kind=int32), parameter :: DEFAULT_Q_STEPS = 21_int32
     integer(kind=int32), parameter :: DEFAULT_MAX_STEPS = 200_int32
     integer(kind=int32), parameter :: DEFAULT_GRID_SIZE = 200_int32
+    integer(kind=int32), parameter :: DEFAULT_SIMULATION_COUNT = 1_int32
 
-    integer(kind=int32) :: p_steps, q_steps, max_steps, grid_size
+    integer(kind=int32) :: p_steps, q_steps, max_steps, grid_size, simulation_count
     
     type(SimulationContext_t) :: context
     type(Simulator_t) :: sim
     type(SimulationResult_t) :: sim_result
 
-    call parse_command_line(p_steps, q_steps, max_steps, grid_size)
+    call parse_command_line(p_steps, q_steps, max_steps, grid_size, simulation_count)
 
-    context = SimulationContext(p_steps, q_steps, max_steps, grid_size)
+    context = SimulationContext(p_steps, q_steps, max_steps, grid_size, simulation_count)
     sim = Simulator(context)
     sim_result = sim%simulate()
 
@@ -26,25 +27,27 @@ program main
     print *, 'wrote phase_diagram.dat'
 
 contains
-    subroutine parse_command_line(p_steps, q_steps, max_steps, grid_size)
-        integer(kind=int32), intent(out) :: p_steps, q_steps, max_steps, grid_size
+    subroutine parse_command_line(p_steps, q_steps, max_steps, grid_size, simulation_count)
+        integer(kind=int32), intent(out) :: p_steps, q_steps, max_steps, grid_size, simulation_count
         integer :: argument_count
 
         p_steps = DEFAULT_P_STEPS
         q_steps = DEFAULT_Q_STEPS
         max_steps = DEFAULT_MAX_STEPS
         grid_size = DEFAULT_GRID_SIZE
+        simulation_count = DEFAULT_SIMULATION_COUNT
 
         argument_count = command_argument_count()
         if (argument_count == 0) return
-        if (argument_count /= 4) then
-            error stop 'Usage: ca-phase-transition [p_steps q_steps max_steps grid_size]'
+        if (argument_count /= 4 .and. argument_count /= 5) then
+            error stop 'Usage: ca-phase-transition [p_steps q_steps max_steps grid_size [simulation_count]]'
         end if
 
         call read_integer_argument(1, p_steps)
         call read_integer_argument(2, q_steps)
         call read_integer_argument(3, max_steps)
         call read_integer_argument(4, grid_size)
+        if (argument_count == 5) call read_integer_argument(5, simulation_count)
     end subroutine parse_command_line
 
     subroutine read_integer_argument(argument_number, value)
@@ -77,7 +80,7 @@ contains
         write(data_unit, '(a)') '# p q active_count'
         do iq = 1, context%q_steps
             do ip = 1, context%p_steps
-                write(data_unit, '(es24.16,1x,es24.16,1x,i0)') &
+                write(data_unit, '(es24.16,1x,es24.16,1x,es24.16)') &
                     context%p_values(ip), context%q_values(iq), &
                     simulation_result%active_count(final_step, ip, iq)
             end do
