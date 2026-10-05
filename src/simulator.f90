@@ -1,5 +1,6 @@
 module simulator_module
     use, intrinsic :: iso_fortran_env, only: int32
+    use omp_lib, only: omp_get_max_threads
     use model, only: DKCA_t, DKCA
     implicit none
     private
@@ -92,23 +93,38 @@ contains
     function simulate(sim) result(simulation_result)
         class(Simulator_t), intent(inout) :: sim
         type(SimulationResult_t) :: simulation_result
+        type(DKCA_t) :: local_model
         integer(kind=int32) :: it, ip, iq
+        integer :: total_patterns, worker_count
 
         allocate(simulation_result%active_count(0:sim%context%max_steps, &
                                                 sim%context%p_steps, &
                                                 sim%context%q_steps))
 
+        ! Every (p, q) run is independent.  Use one worker per pattern when
+        ! possible, while respecting the configured OpenMP thread limit.
+        total_patterns = int(sim%context%p_steps) * int(sim%context%q_steps)
+        worker_count = min(total_patterns, omp_get_max_threads())
+
+        ! Keep a private model per thread so that the state update and
+        ! random-number generation do not race.  Each iteration writes to a
+        ! distinct (time, p, q) region of the shared result array.
+        !$omp parallel do collapse(2) schedule(static) &
+        !$omp& num_threads(worker_count) &
+        !$omp& private(local_model, it, ip, iq) shared(sim, simulation_result)
         do iq = 1, sim%context%q_steps
             do ip = 1, sim%context%p_steps
-                call sim%model%reset()
+                local_model = sim%model
+                call local_model%reset()
                 simulation_result%active_count(0, ip, iq) = &
-                    sim%model%current_active_count()
+                    local_model%current_active_count()
                 do it = 1, sim%context%max_steps
-                    call sim%model%step(sim%context%p_values(ip), sim%context%q_values(iq))
+                    call local_model%step(sim%context%p_values(ip), sim%context%q_values(iq))
                     simulation_result%active_count(it, ip, iq) = &
-                        sim%model%current_active_count()
+                        local_model%current_active_count()
                 end do
             end do
         end do
+        !$omp end parallel do
     end function simulate
 end module simulator_module

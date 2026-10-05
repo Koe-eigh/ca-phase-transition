@@ -40,6 +40,16 @@ Build and run the simulation with the default settings:
 fpm run
 ```
 
+The simulation uses OpenMP to run independent `(p, q)` parameter combinations
+in parallel. The number of workers is selected dynamically as
+`min(p_steps * q_steps, OMP_NUM_THREADS)` (or the system OpenMP default when
+`OMP_NUM_THREADS` is not set), so small parameter sweeps do not create unused
+threads. For example:
+
+```sh
+OMP_NUM_THREADS=8 fpm run --profile release
+```
+
 The simulation parameters can be supplied as positional command-line arguments in
 the order `p_steps q_steps max_steps grid_size`:
 
