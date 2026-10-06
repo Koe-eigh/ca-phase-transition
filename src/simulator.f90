@@ -16,6 +16,7 @@ module simulator_module
         integer(kind=int32) :: max_steps
         integer(kind=int32) :: grid_size
         integer(kind=int32) :: simulation_count
+        logical :: cut_p_below_half
         real(real64), allocatable :: p_values(:)
         real(real64), allocatable :: q_values(:)
     end type SimulationContext_t
@@ -43,9 +44,11 @@ module simulator_module
     end interface Simulator
 
 contains
-    function init_context(p_steps, q_steps, max_steps, grid_size, simulation_count) result(context)
+    function init_context(p_steps, q_steps, max_steps, grid_size, simulation_count, &
+                          cut_p_below_half) result(context)
         integer(kind=int32), intent(in) :: p_steps, q_steps, max_steps, grid_size
         integer(kind=int32), intent(in), optional :: simulation_count
+        logical, intent(in), optional :: cut_p_below_half
         type(SimulationContext_t) :: context
         integer(kind=int32) :: i
 
@@ -55,6 +58,8 @@ contains
         context%grid_size = grid_size
         context%simulation_count = 1_int32
         if (present(simulation_count)) context%simulation_count = simulation_count
+        context%cut_p_below_half = .false.
+        if (present(cut_p_below_half)) context%cut_p_below_half = cut_p_below_half
 
         if (p_steps <= 0 .or. q_steps <= 0 .or. max_steps < 0 .or. grid_size <= 0 .or. &
             context%simulation_count <= 0) then
@@ -121,6 +126,8 @@ contains
         !$omp& shared(sim, simulation_result)
         do iq = 1, sim%context%q_steps
             do ip = 1, sim%context%p_steps
+                if (sim%context%cut_p_below_half .and. &
+                    sim%context%p_values(ip) < 0.5_real64) cycle
                 ! The model arrays are allocated/copied once per parameter
                 ! combination and then reused for all Monte Carlo trials.
                 local_model = sim%model

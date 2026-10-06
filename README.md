@@ -63,5 +63,12 @@ fpm run --profile release -- 21 21 200 200 10
 each `(p, q)` combination. If it is omitted, one simulation is run.
 If no arguments are supplied, the default values above are used.
 
+To skip calculations for parameter combinations with `p < 0.5`, add the optional
+flag. The skipped cells remain zero in the output:
+
+```sh
+fpm run --profile release -- 21 21 200 200 10 --cut-p-below-half
+```
+
 ## Reference
 - [1] E. Domany and W. Kinzel, Phys. Rev. Lett. 53, 447 (1984).

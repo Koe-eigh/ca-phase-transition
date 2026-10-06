@@ -12,14 +12,15 @@ program main
     integer(kind=int32), parameter :: DEFAULT_SIMULATION_COUNT = 1_int32
 
     integer(kind=int32) :: p_steps, q_steps, max_steps, grid_size, simulation_count
+    logical :: cut_p_below_half
     
     type(SimulationContext_t) :: context
     type(Simulator_t) :: sim
     type(SimulationResult_t) :: sim_result
 
-    call parse_command_line(p_steps, q_steps, max_steps, grid_size, simulation_count)
+    call parse_command_line(p_steps, q_steps, max_steps, grid_size, simulation_count, cut_p_below_half)
 
-    context = SimulationContext(p_steps, q_steps, max_steps, grid_size, simulation_count)
+    context = SimulationContext(p_steps, q_steps, max_steps, grid_size, simulation_count, cut_p_below_half)
     sim = Simulator(context)
     sim_result = sim%simulate()
 
@@ -27,27 +28,44 @@ program main
     print *, 'wrote phase_diagram.dat'
 
 contains
-    subroutine parse_command_line(p_steps, q_steps, max_steps, grid_size, simulation_count)
+    subroutine parse_command_line(p_steps, q_steps, max_steps, grid_size, simulation_count, cut_p_below_half)
         integer(kind=int32), intent(out) :: p_steps, q_steps, max_steps, grid_size, simulation_count
+        logical, intent(out) :: cut_p_below_half
         integer :: argument_count
+        character(len=64) :: option
 
         p_steps = DEFAULT_P_STEPS
         q_steps = DEFAULT_Q_STEPS
         max_steps = DEFAULT_MAX_STEPS
         grid_size = DEFAULT_GRID_SIZE
         simulation_count = DEFAULT_SIMULATION_COUNT
+        cut_p_below_half = .false.
 
         argument_count = command_argument_count()
         if (argument_count == 0) return
-        if (argument_count /= 4 .and. argument_count /= 5) then
-            error stop 'Usage: ca-phase-transition [p_steps q_steps max_steps grid_size [simulation_count]]'
+        if (argument_count < 4 .or. argument_count > 6) then
+            error stop 'Usage: ca-phase-transition [p_steps q_steps max_steps grid_size [simulation_count]] [--cut-p-below-half]'
         end if
 
         call read_integer_argument(1, p_steps)
         call read_integer_argument(2, q_steps)
         call read_integer_argument(3, max_steps)
         call read_integer_argument(4, grid_size)
-        if (argument_count == 5) call read_integer_argument(5, simulation_count)
+        if (argument_count >= 5) then
+            call get_command_argument(5, option)
+            if (trim(option) == '--cut-p-below-half') then
+                cut_p_below_half = .true.
+            else
+                call read_integer_argument(5, simulation_count)
+            end if
+        end if
+        if (argument_count == 6) then
+            call get_command_argument(6, option)
+            if (trim(option) /= '--cut-p-below-half') then
+                error stop 'Unknown option; expected --cut-p-below-half'
+            end if
+            cut_p_below_half = .true.
+        end if
     end subroutine parse_command_line
 
     subroutine read_integer_argument(argument_number, value)
