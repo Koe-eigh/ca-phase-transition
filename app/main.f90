@@ -1,5 +1,5 @@
 program main
-    use, intrinsic :: iso_fortran_env, only: int32
+    use, intrinsic :: iso_fortran_env, only: int32, real64
     use simulator_module, only: SimulationContext_t, SimulationContext, &
                                 Simulator_t, Simulator, SimulationResult_t
     implicit none
@@ -26,6 +26,8 @@ program main
 
     call write_phase_diagram_data(context, sim_result, 'phase_diagram.dat')
     print *, 'wrote phase_diagram.dat'
+    call write_time_evolution_data(context, sim_result, 'time_evolution.dat')
+    print *, 'wrote time_evolution.dat'
 
 contains
     subroutine parse_command_line(p_steps, q_steps, max_steps, grid_size, simulation_count, cut_p_below_half)
@@ -102,8 +104,37 @@ contains
                     context%p_values(ip), context%q_values(iq), &
                     simulation_result%active_count(final_step, ip, iq)
             end do
-            write(data_unit, *)
+            if (iq < context%q_steps) write(data_unit, *)
         end do
         close(data_unit)
     end subroutine write_phase_diagram_data
+
+    subroutine write_time_evolution_data(context, simulation_result, data_filename)
+        type(SimulationContext_t), intent(in) :: context
+        type(SimulationResult_t), intent(in) :: simulation_result
+        character(len=*), intent(in) :: data_filename
+        integer :: data_unit, io_status
+        integer(kind=int32) :: ip, iq, it
+
+        open(newunit=data_unit, file=data_filename, status='replace', action='write', iostat=io_status)
+        if (io_status /= 0) error stop 'Could not open time evolution data file'
+        write(data_unit, '(a)') '# p q k mean_N survivor_count mean_mu mean_mu2 variance_mu mean_sigma2'
+        do iq = 1, context%q_steps
+            do ip = 1, context%p_steps
+                if (context%cut_p_below_half .and. context%p_values(ip) < 0.5_real64) cycle
+                do it = 0, context%max_steps
+                    write(data_unit, '(es24.16,1x,es24.16,1x,i0,1x,es24.16,1x,i0,4(1x,es24.16))') &
+                        context%p_values(ip), context%q_values(iq), it, &
+                        simulation_result%active_count(it, ip, iq), &
+                        simulation_result%survivor_count(it, ip, iq), &
+                        simulation_result%mean_mu(it, ip, iq), &
+                        simulation_result%mean_mu2(it, ip, iq), &
+                        simulation_result%variance_mu(it, ip, iq), &
+                        simulation_result%mean_sigma2(it, ip, iq)
+                end do
+                if (iq < context%q_steps .or. ip < context%p_steps) write(data_unit, *)
+            end do
+        end do
+        close(data_unit)
+    end subroutine write_time_evolution_data
 end program main

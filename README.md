@@ -63,6 +63,34 @@ fpm run --profile release -- 21 21 200 200 10
 each `(p, q)` combination. If it is omitted, one simulation is run.
 If no arguments are supplied, the default values above are used.
 
+Each run writes `phase_diagram.dat` and `time_evolution.dat` in the current
+directory. `time_evolution.dat` has one row per `(p, q, k)`, including `k=0`,
+with columns:
+
+```text
+p q k mean_N survivor_count mean_mu mean_mu2 variance_mu mean_sigma2
+```
+
+For each trial with active sites, `mu` is the mean site coordinate and `sigma2`
+is the mean squared distance from `mu`. The coordinates are centered on the
+initial active site (`j=0`). `mean_mu`, `mean_mu2`, and `mean_sigma2` average
+over surviving trials at that time step; `variance_mu = mean_mu2 - mean_mu^2`.
+`mean_N` averages over all trials, including extinct ones. When no trial
+survives, the four moment columns are `NaN` and `survivor_count` is zero.
+
+To plot `mean_mu2` and `mean_sigma2` against time for one parameter pair, run:
+
+```sh
+gnuplot -e "p_target=0.8; q_target=0.5" time_evolution.gp
+```
+
+This writes `time_evolution.png`. Choose values present in `time_evolution.dat`.
+
+To compare several parameter pairs in one two-panel figure, run
+`gnuplot time_evolution_comparison.gp`. It writes
+`time_evolution_comparison.png`; edit the `p_targets` and `q_targets` arrays in
+the script to choose other pairs.
+
 To skip calculations for parameter combinations with `p < 0.5`, add the optional
 flag. The skipped cells remain zero in the output:
 

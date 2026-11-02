@@ -1,5 +1,6 @@
 module simulator_module
     use, intrinsic :: iso_fortran_env, only: int32, real64
+    use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
     use omp_lib, only: omp_get_max_threads
     use model, only: DKCA_t, DKCA
     implicit none
@@ -37,6 +38,11 @@ module simulator_module
     ! their indices in the parameter sweep.
     type :: SimulationResult_t
         real(real64), allocatable :: active_count(:, :, :)
+        integer(kind=int32), allocatable :: survivor_count(:, :, :)
+        real(real64), allocatable :: mean_mu(:, :, :)
+        real(real64), allocatable :: mean_mu2(:, :, :)
+        real(real64), allocatable :: variance_mu(:, :, :)
+        real(real64), allocatable :: mean_sigma2(:, :, :)
     end type SimulationResult_t
 
     interface Simulator
@@ -97,7 +103,7 @@ contains
         initial_state(0) = 1_int32
 
         sim%context = context
-        sim%model = DKCA(initial_state)
+        sim%model = DKCA(initial_state, lb)
     end function init
 
     function simulate(sim) result(simulation_result)
@@ -105,12 +111,28 @@ contains
         type(SimulationResult_t) :: simulation_result
         type(DKCA_t) :: local_model
         integer(kind=int32) :: it, ip, iq, isim, active_count
+        real(real64) :: survivor_total
         integer :: total_patterns, worker_count
 
         allocate(simulation_result%active_count(0:sim%context%max_steps, &
                                                 sim%context%p_steps, &
                                                 sim%context%q_steps))
         simulation_result%active_count = 0.0_real64
+        allocate(simulation_result%survivor_count(0:sim%context%max_steps, &
+                                                   sim%context%p_steps, sim%context%q_steps))
+        allocate(simulation_result%mean_mu(0:sim%context%max_steps, &
+                                            sim%context%p_steps, sim%context%q_steps))
+        allocate(simulation_result%mean_mu2(0:sim%context%max_steps, &
+                                             sim%context%p_steps, sim%context%q_steps))
+        allocate(simulation_result%variance_mu(0:sim%context%max_steps, &
+                                                sim%context%p_steps, sim%context%q_steps))
+        allocate(simulation_result%mean_sigma2(0:sim%context%max_steps, &
+                                                sim%context%p_steps, sim%context%q_steps))
+        simulation_result%survivor_count = 0_int32
+        simulation_result%mean_mu = 0.0_real64
+        simulation_result%mean_mu2 = 0.0_real64
+        simulation_result%variance_mu = 0.0_real64
+        simulation_result%mean_sigma2 = 0.0_real64
 
         ! Every (p, q) run is independent.  Use one worker per pattern when
         ! possible, while respecting the configured OpenMP thread limit.
@@ -122,7 +144,7 @@ contains
         ! distinct (time, p, q) region of the shared result array.
         !$omp parallel do collapse(2) schedule(static) &
         !$omp& num_threads(worker_count) &
-        !$omp& private(local_model, it, ip, iq, isim, active_count) &
+        !$omp& private(local_model, it, ip, iq, isim, active_count, survivor_total) &
         !$omp& shared(sim, simulation_result)
         do iq = 1, sim%context%q_steps
             do ip = 1, sim%context%p_steps
@@ -133,9 +155,11 @@ contains
                 local_model = sim%model
                 do isim = 1, sim%context%simulation_count
                     call local_model%reset()
+                    active_count = local_model%current_active_count()
                     simulation_result%active_count(0, ip, iq) = &
                         simulation_result%active_count(0, ip, iq) + &
-                        real(local_model%current_active_count(), real64)
+                        real(active_count, real64)
+                    call accumulate_moments(local_model, simulation_result, 0_int32, ip, iq, active_count)
                     do it = 1, sim%context%max_steps
                         call local_model%step(sim%context%p_values(ip), sim%context%q_values(iq), &
                                               active_count)
@@ -145,13 +169,47 @@ contains
                         ! The all-zero state is absorbing, so later time
                         ! steps remain zero and do not need to be simulated.
                         if (active_count == 0_int32) exit
+                        call accumulate_moments(local_model, simulation_result, it, ip, iq, active_count)
                     end do
                 end do
                 simulation_result%active_count(:, ip, iq) = &
                     simulation_result%active_count(:, ip, iq) / &
                     real(sim%context%simulation_count, real64)
+                do it = 0, sim%context%max_steps
+                    if (simulation_result%survivor_count(it, ip, iq) == 0_int32) then
+                        simulation_result%mean_mu(it, ip, iq) = ieee_value(0.0_real64, ieee_quiet_nan)
+                        simulation_result%mean_mu2(it, ip, iq) = ieee_value(0.0_real64, ieee_quiet_nan)
+                        simulation_result%variance_mu(it, ip, iq) = ieee_value(0.0_real64, ieee_quiet_nan)
+                        simulation_result%mean_sigma2(it, ip, iq) = ieee_value(0.0_real64, ieee_quiet_nan)
+                    else
+                        survivor_total = real(simulation_result%survivor_count(it, ip, iq), real64)
+                        simulation_result%mean_mu(it, ip, iq) = simulation_result%mean_mu(it, ip, iq) / survivor_total
+                        simulation_result%mean_mu2(it, ip, iq) = simulation_result%mean_mu2(it, ip, iq) / survivor_total
+                        simulation_result%mean_sigma2(it, ip, iq) = &
+                            simulation_result%mean_sigma2(it, ip, iq) / survivor_total
+                        simulation_result%variance_mu(it, ip, iq) = &
+                            simulation_result%mean_mu2(it, ip, iq) - &
+                            simulation_result%mean_mu(it, ip, iq)**2
+                    end if
+                end do
             end do
         end do
         !$omp end parallel do
     end function simulate
+
+    subroutine accumulate_moments(local_model, simulation_result, time_step, ip, iq, active_count)
+        type(DKCA_t), intent(in) :: local_model
+        type(SimulationResult_t), intent(inout) :: simulation_result
+        integer(kind=int32), intent(in) :: time_step, ip, iq, active_count
+        real(real64) :: mu, sigma2
+
+        if (active_count == 0_int32) return
+        call local_model%current_spatial_moments(active_count, mu, sigma2)
+        simulation_result%survivor_count(time_step, ip, iq) = &
+            simulation_result%survivor_count(time_step, ip, iq) + 1_int32
+        simulation_result%mean_mu(time_step, ip, iq) = simulation_result%mean_mu(time_step, ip, iq) + mu
+        simulation_result%mean_mu2(time_step, ip, iq) = simulation_result%mean_mu2(time_step, ip, iq) + mu**2
+        simulation_result%mean_sigma2(time_step, ip, iq) = &
+            simulation_result%mean_sigma2(time_step, ip, iq) + sigma2
+    end subroutine accumulate_moments
 end module simulator_module
