@@ -1,6 +1,6 @@
 module model
     use, intrinsic :: iso_fortran_env, only: int32, int64, real64
-    use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite, ieee_value, ieee_quiet_nan
     implicit none
     private
 
@@ -31,6 +31,10 @@ contains
         integer(kind=int32), intent(in), optional :: first_index
         type(DKCA_t) :: dkca
         integer(kind=int32) :: first
+
+        if (size(initial_state) == 0) error stop 'Initial state must be nonempty'
+        if (any(initial_state /= 0_int32 .and. initial_state /= 1_int32)) &
+            error stop 'Initial state must contain only 0 and 1'
 
         first = 1_int32
         if (present(first_index)) first = first_index
@@ -96,6 +100,12 @@ contains
         integer(kind=int32) :: j, left, right, next_active_count
         integer(kind=int64) :: time_key
         real(real64) :: probability, random_value
+
+        if (.not. ieee_is_finite(p) .or. .not. ieee_is_finite(q)) &
+            error stop 'Probabilities p and q must be finite'
+        if (p < 0.0_real64 .or. p > 1.0_real64 .or. &
+            q < 0.0_real64 .or. q > 1.0_real64) &
+            error stop 'Probabilities p and q must be in [0, 1]'
 
         next_active_count = 0_int32
         time_key = mix_hash(dkca%rng_state, int(dkca%time_step, int64) + 1_int64)

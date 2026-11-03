@@ -49,6 +49,13 @@ program test_model
     if (any(automaton%state /= 0_int32)) error stop 'Impossible transitions stayed active'
     if (transition_count /= 0_int32) error stop 'Impossible transition count mismatch'
 
+    ! A one-site ring is valid, and each probability may independently reach an endpoint.
+    automaton = DKCA([1_int32])
+    call automaton%step(0.0_real64, 1.0_real64)
+    if (automaton%current_active_count() /= 1_int32) error stop 'One-site certain transition failed'
+    call automaton%step(1.0_real64, 0.0_real64)
+    if (automaton%current_active_count() /= 0_int32) error stop 'One-site impossible transition failed'
+
     ! At p=q=1, a single seed produces sites -1,+1 at k=1 and -2,0,+2 at k=2.
     sim = Simulator(SimulationContext(2_int32, 2_int32, 3_int32, 5_int32, 3_int32))
     result = sim%simulate()
