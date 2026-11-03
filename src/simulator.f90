@@ -1,5 +1,5 @@
 module simulator_module
-    use, intrinsic :: iso_fortran_env, only: int32, real64
+    use, intrinsic :: iso_fortran_env, only: int32, int64, real64
     use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
     use omp_lib, only: omp_get_max_threads
     use model, only: DKCA_t, DKCA
@@ -17,6 +17,7 @@ module simulator_module
         integer(kind=int32) :: max_steps
         integer(kind=int32) :: grid_size
         integer(kind=int32) :: simulation_count
+        integer(kind=int64) :: seed
         logical :: cut_p_below_half
         real(real64), allocatable :: p_values(:)
         real(real64), allocatable :: q_values(:)
@@ -37,6 +38,7 @@ module simulator_module
     ! The first dimension is the time step. p and q are represented by
     ! their indices in the parameter sweep.
     type :: SimulationResult_t
+        integer(kind=int64) :: seed
         real(real64), allocatable :: active_count(:, :, :)
         integer(kind=int32), allocatable :: survivor_count(:, :, :)
         real(real64), allocatable :: mean_mu(:, :, :)
@@ -51,10 +53,11 @@ module simulator_module
 
 contains
     function init_context(p_steps, q_steps, max_steps, grid_size, simulation_count, &
-                          cut_p_below_half) result(context)
+                          cut_p_below_half, seed) result(context)
         integer(kind=int32), intent(in) :: p_steps, q_steps, max_steps, grid_size
         integer(kind=int32), intent(in), optional :: simulation_count
         logical, intent(in), optional :: cut_p_below_half
+        integer(kind=int64), intent(in), optional :: seed
         type(SimulationContext_t) :: context
         integer(kind=int32) :: i
 
@@ -66,6 +69,8 @@ contains
         if (present(simulation_count)) context%simulation_count = simulation_count
         context%cut_p_below_half = .false.
         if (present(cut_p_below_half)) context%cut_p_below_half = cut_p_below_half
+        call system_clock(count=context%seed)
+        if (present(seed)) context%seed = seed
 
         if (p_steps <= 0 .or. q_steps <= 0 .or. max_steps < 0 .or. grid_size <= 0 .or. &
             context%simulation_count <= 0) then
@@ -114,6 +119,7 @@ contains
         real(real64) :: survivor_total
         integer :: total_patterns, worker_count
 
+        simulation_result%seed = sim%context%seed
         allocate(simulation_result%active_count(0:sim%context%max_steps, &
                                                 sim%context%p_steps, &
                                                 sim%context%q_steps))
@@ -155,6 +161,7 @@ contains
                 local_model = sim%model
                 do isim = 1, sim%context%simulation_count
                     call local_model%reset()
+                    call local_model%seed_stream(sim%context%seed, ip, iq, isim)
                     active_count = local_model%current_active_count()
                     simulation_result%active_count(0, ip, iq) = &
                         simulation_result%active_count(0, ip, iq) + &
