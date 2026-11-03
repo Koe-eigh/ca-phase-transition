@@ -16,7 +16,9 @@ set grid
 # Draw contours of active_count, including the fitted-boundary level 10.
 set contour base
 set cntrparam levels incremental 0,5,50
-set cntrlabel format '%g' font ',8'
+set cntrparam firstlinetype 1
+set cntrlabel onecolor format '%g' font ',8' start 12 interval -1
+set linetype 1 lc rgb 'white' lw 1
 
 # Draw the heat map and contours as two overlaid map plots.
 set lmargin at screen 0.105
@@ -42,5 +44,8 @@ unset border
 set xrange [0:1]
 set yrange [0:1]
 set clip two
-splot 'phase_diagram.dat' using 1:2:3 with lines lc rgb 'white' lw 1 notitle
+splot 'phase_diagram.dat' using 1:2:3 with lines lt 1 notitle
+# Label the major levels separately so neighboring values stay legible.
+set cntrparam levels incremental 10,10,50
+splot 'phase_diagram.dat' using 1:2:3 with labels tc rgb 'white' notitle
 unset multiplot
