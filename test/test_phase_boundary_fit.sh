@@ -30,3 +30,26 @@ awk '
     }
     END { if (!found) exit 1 }
 ' fitted_boundary.dat
+
+# Short closed contours can precede the boundary branch. Component IDs above 1
+# must remain visible to stats even though the plot axes span only [0:1].
+python3 - <<'PY'
+import math
+
+with open('phase_diagram.dat', 'w') as data:
+    for q_index in range(101):
+        q = q_index / 100
+        boundary_p = 0.55 + 0.2 * math.sqrt(1 - q)
+        for p_index in range(101):
+            p = p_index / 100
+            fraction = 0.1 + 2 * (p - boundary_p)
+            for center in (0.82, 0.86, 0.90):
+                fraction -= 0.4 * math.exp(
+                    -((p - center) / 0.012) ** 2 - ((q - 0.05) / 0.025) ** 2
+                )
+            data.write(f'{p} {q} 0 {fraction}\n')
+        data.write('\n')
+PY
+gnuplot "$project_dir/phase_boundary_fit.gp" > fit-output.txt 2>&1
+grep -q '^Fitting contour component 3 (111 points)$' fit-output.txt
+grep -q '^Observed level 0.1 endpoint at q=1: p=0.55$' fit-output.txt

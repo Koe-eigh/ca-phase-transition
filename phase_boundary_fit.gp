@@ -39,8 +39,12 @@ set surface
 
 # A contour table separates disconnected curves with blank lines. Gnuplot's
 # pseudocolumn -1 identifies each curve; keep the longest phase-boundary branch.
+# stats applies the plot ranges, so include component IDs above 1.
+set autoscale xy
 stats $boundary_points using (column(-1)) nooutput
 component_count = int(STATS_max) + 1
+set xrange [0:1]
+set yrange [0:1]
 selected_component = -1
 selected_count = 0
 do for [component=0:component_count-1] {
