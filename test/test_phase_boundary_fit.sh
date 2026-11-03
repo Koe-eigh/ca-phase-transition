@@ -15,10 +15,18 @@ awk '
 ' fit.log
 awk '
     $1 == "a" && $2 == "=" {
-        if ($3 < -8.516 || $3 > -8.496) exit 1
+        if ($3 < -13.822 || $3 > -13.802) exit 1
         found = 1
     }
     END { if (!found) exit 1 }
 ' fit.log
 test -s phase_boundary_fit.png
 test -s fitted_boundary.dat
+awk '
+    $3 == "i" && !found {
+        expected = 0.55 + 0.05 * (10 - 7.45) / (21.8 - 7.45)
+        if ($1 < expected - 0.000001 || $1 > expected + 0.000001 || $2 != 1) exit 1
+        found = 1
+    }
+    END { if (!found) exit 1 }
+' fitted_boundary.dat
