@@ -69,7 +69,11 @@ contains
             end if
 
             call random_number(random_value)
-            dkca%next_state(j) = (random_value < probability ? 1_int32 : 0_int32)
+            if (random_value < probability) then
+                dkca%next_state(j) = 1_int32
+            else
+                dkca%next_state(j) = 0_int32
+            end if
             next_active_count = next_active_count + dkca%next_state(j)
         end do
 

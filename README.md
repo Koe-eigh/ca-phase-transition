@@ -36,6 +36,10 @@ is expected to exhibit three qualitatively different behaviors: explosion, stagn
 
 ## Usage
 
+The source supports Fortran 2018. For example, use
+`fpm test --flag '-std=f2018 -fopenmp'` to check the language standard with
+GNU Fortran.
+
 Build and run the simulation with the default settings:
 
 ```sh
