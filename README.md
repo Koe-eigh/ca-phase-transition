@@ -36,6 +36,29 @@ is expected to exhibit three qualitatively different behaviors: explosion, stagn
 
 ## Usage
 
+The one-command experiment workflow requires `fpm` and `gnuplot` on `PATH`.
+Run it from the repository root to build the release executable, simulate,
+and generate all seven figures:
+
+```sh
+make experiment
+```
+
+Results are written to `experiments/latest/` by default. Set the simulation
+parameters, optional cut, and destination with Make variables:
+
+```sh
+make experiment p_steps=21 q_steps=21 max_steps=200 grid_size=200 \
+  simulation_count=10 cut_p_below_half=true output_dir=experiments/my-run
+```
+
+`cut_p_below_half` accepts `true` or `false` (the default). The output directory
+contains `phase_diagram.dat`, `time_evolution.dat`, `summary.txt`, all seven
+`.png` figures, and `fitted_boundary.dat`. The plotting scripts use fixed
+parameter pairs and require enough sampled points for the boundary fit. The
+Make defaults use a 21-by-21 sweep with 10 trials per pair; smaller or noisier
+sweeps may fail during plotting.
+
 The source supports Fortran 2018. For example, use
 `fpm test --flag '-std=f2018 -fopenmp'` to check the language standard with
 GNU Fortran.
