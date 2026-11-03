@@ -84,8 +84,16 @@ results may change if it or the simulation algorithm changes in a later version.
 each `(p, q)` combination. If it is omitted, one simulation is run.
 If no arguments are supplied, the default values above are used.
 
-Each run writes `phase_diagram.dat` and `time_evolution.dat` in the current
-directory. `phase_diagram.dat` has columns `p q active_count active_fraction`.
+Each successful run writes `phase_diagram.dat`, `time_evolution.dat`, and
+`summary.txt` in the current directory. The summary is written after the data
+files are complete. It records the run settings, effective seed, number of
+calculated `(p, q)` combinations, elapsed time in seconds, output filenames,
+and the minimum and maximum final-step mean active counts over calculated
+combinations. When the cut excludes every combination, the range is marked
+`n/a`. A new run removes any previous summary before starting, so a failed
+run does not leave an older success summary in place.
+
+`phase_diagram.dat` has columns `p q active_count active_fraction`.
 It retains the final-time mean active count over all trials and records
 `grid_size`, `final_step`, and `reachable_sites` in comment headers. With one
 initial active site on a periodic ring of size `L`, the number of sites

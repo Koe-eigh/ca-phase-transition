@@ -39,6 +39,7 @@ module simulator_module
     ! their indices in the parameter sweep.
     type :: SimulationResult_t
         integer(kind=int64) :: seed
+        integer(kind=int64) :: completed_patterns
         real(real64), allocatable :: active_count(:, :, :)
         integer(kind=int32), allocatable :: survivor_count(:, :, :)
         real(real64), allocatable :: mean_mu(:, :, :)
@@ -225,6 +226,7 @@ contains
             write(output_unit, '(a)') 'progress: 100%'
             flush(output_unit)
         end if
+        simulation_result%completed_patterns = completed_patterns
     end function simulate
 
     subroutine accumulate_moments(local_model, simulation_result, time_step, ip, iq, active_count)

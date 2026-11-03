@@ -1,5 +1,6 @@
 program main
     use, intrinsic :: iso_fortran_env, only: int32, int64, real64
+    use, intrinsic :: iso_c_binding, only: c_char, c_int, c_null_char
     use simulator_module, only: SimulationContext_t, SimulationContext, &
                                 Simulator_t, Simulator, SimulationResult_t
     implicit none
@@ -13,14 +14,27 @@ program main
 
     integer(kind=int32) :: p_steps, q_steps, max_steps, grid_size, simulation_count
     integer(kind=int64) :: seed
+    integer(kind=int64) :: start_tick, end_tick, tick_rate
+    real(real64) :: elapsed_seconds
     logical :: cut_p_below_half
     
     type(SimulationContext_t) :: context
     type(Simulator_t) :: sim
     type(SimulationResult_t) :: sim_result
 
+    interface
+        function c_rename(old_name, new_name) bind(C, name='rename') result(status)
+            import :: c_char, c_int
+            character(kind=c_char), intent(in) :: old_name(*), new_name(*)
+            integer(c_int) :: status
+        end function c_rename
+    end interface
+
+    call remove_previous_summary()
     call parse_command_line(p_steps, q_steps, max_steps, grid_size, simulation_count, cut_p_below_half, seed)
 
+    call system_clock(count=start_tick, count_rate=tick_rate)
+    if (tick_rate <= 0_int64) error stop 'System clock is unavailable'
     context = SimulationContext(p_steps, q_steps, max_steps, grid_size, simulation_count, cut_p_below_half, seed)
     print '(a,i0)', 'seed: ', context%seed
     sim = Simulator(context)
@@ -30,8 +44,71 @@ program main
     print *, 'wrote phase_diagram.dat'
     call write_time_evolution_data(context, sim_result, 'time_evolution.dat')
     print *, 'wrote time_evolution.dat'
+    call system_clock(count=end_tick)
+    elapsed_seconds = real(end_tick - start_tick, real64) / real(tick_rate, real64)
+    call write_summary(context, sim_result, elapsed_seconds, 'summary.txt')
+    print *, 'wrote summary.txt'
 
 contains
+    subroutine remove_previous_summary()
+        integer :: summary_unit, io_status
+        logical :: exists
+
+        inquire(file='summary.txt', exist=exists)
+        if (.not. exists) return
+        open(newunit=summary_unit, file='summary.txt', status='old', iostat=io_status)
+        if (io_status /= 0) error stop 'Could not open previous summary file'
+        close(summary_unit, status='delete', iostat=io_status)
+        if (io_status /= 0) error stop 'Could not remove previous summary file'
+    end subroutine remove_previous_summary
+
+    subroutine write_summary(context, simulation_result, elapsed_seconds, filename)
+        type(SimulationContext_t), intent(in) :: context
+        type(SimulationResult_t), intent(in) :: simulation_result
+        real(real64), intent(in) :: elapsed_seconds
+        character(len=*), intent(in) :: filename
+        integer :: summary_unit, io_status
+        integer(kind=int32) :: ip, iq
+        real(real64) :: final_count, minimum_count, maximum_count
+
+        minimum_count = huge(0.0_real64)
+        maximum_count = -huge(0.0_real64)
+        do iq = 1, context%q_steps
+            do ip = 1, context%p_steps
+                if (context%cut_p_below_half .and. context%p_values(ip) < 0.5_real64) cycle
+                final_count = simulation_result%active_count(context%max_steps, ip, iq)
+                minimum_count = min(minimum_count, final_count)
+                maximum_count = max(maximum_count, final_count)
+            end do
+        end do
+
+        open(newunit=summary_unit, file=filename // '.tmp', status='replace', action='write', iostat=io_status)
+        if (io_status /= 0) error stop 'Could not create summary file'
+        write(summary_unit, '(a)') 'Experiment summary'
+        write(summary_unit, '(a,i0)') 'p_steps: ', context%p_steps
+        write(summary_unit, '(a,i0)') 'q_steps: ', context%q_steps
+        write(summary_unit, '(a,i0)') 'max_steps: ', context%max_steps
+        write(summary_unit, '(a,i0)') 'grid_size: ', context%grid_size
+        write(summary_unit, '(a,i0)') 'simulation_count: ', context%simulation_count
+        write(summary_unit, '(a,l1)') 'cut_p_below_half: ', context%cut_p_below_half
+        write(summary_unit, '(a,i0)') 'seed: ', simulation_result%seed
+        write(summary_unit, '(a,i0)') 'completed_patterns: ', simulation_result%completed_patterns
+        write(summary_unit, '(a,f0.6)') 'elapsed_seconds: ', elapsed_seconds
+        write(summary_unit, '(a)') 'files: phase_diagram.dat, time_evolution.dat, summary.txt'
+        if (simulation_result%completed_patterns > 0_int64) then
+            write(summary_unit, '(a,es24.16)') 'final_mean_active_count_min: ', minimum_count
+            write(summary_unit, '(a,es24.16)') 'final_mean_active_count_max: ', maximum_count
+        else
+            write(summary_unit, '(a)') 'final_mean_active_count_min: n/a (no patterns calculated)'
+            write(summary_unit, '(a)') 'final_mean_active_count_max: n/a (no patterns calculated)'
+        end if
+        write(summary_unit, '(a)') 'status: complete'
+        close(summary_unit, iostat=io_status)
+        if (io_status /= 0) error stop 'Could not finish summary file'
+        io_status = c_rename(filename // '.tmp' // c_null_char, filename // c_null_char)
+        if (io_status /= 0) error stop 'Could not publish summary file'
+    end subroutine write_summary
+
     subroutine parse_command_line(p_steps, q_steps, max_steps, grid_size, simulation_count, cut_p_below_half, seed)
         integer(kind=int32), intent(out) :: p_steps, q_steps, max_steps, grid_size, simulation_count
         logical, intent(out) :: cut_p_below_half
@@ -147,7 +224,8 @@ contains
             end do
             if (iq < context%q_steps) write(data_unit, *)
         end do
-        close(data_unit)
+        close(data_unit, iostat=io_status)
+        if (io_status /= 0) error stop 'Could not finish phase diagram data file'
     end subroutine write_phase_diagram_data
 
     subroutine write_time_evolution_data(context, simulation_result, data_filename)
@@ -177,6 +255,7 @@ contains
                 if (iq < context%q_steps .or. ip < context%p_steps) write(data_unit, *)
             end do
         end do
-        close(data_unit)
+        close(data_unit, iostat=io_status)
+        if (io_status /= 0) error stop 'Could not finish time evolution data file'
     end subroutine write_time_evolution_data
 end program main
