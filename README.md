@@ -47,10 +47,11 @@ fpm run
 ```
 
 The simulation uses OpenMP to run independent `(p, q)` parameter combinations
-in parallel. The number of workers is selected dynamically as
-`min(p_steps * q_steps, OMP_NUM_THREADS)` (or the system OpenMP default when
-`OMP_NUM_THREADS` is not set), so small parameter sweeps do not create unused
-threads. For example:
+in parallel. The number of workers is selected dynamically from the number of
+combinations actually calculated and `OMP_NUM_THREADS` (or the system OpenMP
+default when `OMP_NUM_THREADS` is not set), so small parameter sweeps do not
+create unused threads. Progress is printed to standard output from 0% to 100%
+as combinations finish, at approximately 1% intervals. For example:
 
 ```sh
 OMP_NUM_THREADS=8 fpm run --profile release
