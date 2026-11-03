@@ -1,5 +1,5 @@
 module simulator_module
-    use, intrinsic :: iso_fortran_env, only: int32, int64, real64
+    use, intrinsic :: iso_fortran_env, only: int32, int64, real64, output_unit
     use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
     use omp_lib, only: omp_get_max_threads
     use model, only: DKCA_t, DKCA
@@ -117,7 +117,8 @@ contains
         type(DKCA_t) :: local_model
         integer(kind=int32) :: it, ip, iq, isim, active_count
         real(real64) :: survivor_total
-        integer :: total_patterns, worker_count
+        integer :: worker_count, progress_percent, last_percent
+        integer(kind=int64) :: total_patterns, completed_patterns
 
         simulation_result%seed = sim%context%seed
         allocate(simulation_result%active_count(0:sim%context%max_steps, &
@@ -142,16 +143,24 @@ contains
 
         ! Every (p, q) run is independent.  Use one worker per pattern when
         ! possible, while respecting the configured OpenMP thread limit.
-        total_patterns = int(sim%context%p_steps) * int(sim%context%q_steps)
-        worker_count = min(total_patterns, omp_get_max_threads())
+        total_patterns = int(sim%context%p_steps, int64) * int(sim%context%q_steps, int64)
+        if (sim%context%cut_p_below_half) then
+            total_patterns = int(count(sim%context%p_values >= 0.5_real64), int64) * &
+                             int(sim%context%q_steps, int64)
+        end if
+        worker_count = int(min(max(total_patterns, 1_int64), int(omp_get_max_threads(), int64)))
+        completed_patterns = 0_int64
+        last_percent = 0
+        write(output_unit, '(a)') 'progress: 0%'
+        flush(output_unit)
 
         ! Keep a private model per thread so that the state update and
         ! random-number generation do not race.  Each iteration writes to a
         ! distinct (time, p, q) region of the shared result array.
         !$omp parallel do collapse(2) schedule(static) &
         !$omp& num_threads(worker_count) &
-        !$omp& private(local_model, it, ip, iq, isim, active_count, survivor_total) &
-        !$omp& shared(sim, simulation_result)
+        !$omp& private(local_model, it, ip, iq, isim, active_count, survivor_total, progress_percent) &
+        !$omp& shared(sim, simulation_result, completed_patterns, total_patterns, last_percent)
         do iq = 1, sim%context%q_steps
             do ip = 1, sim%context%p_steps
                 if (sim%context%cut_p_below_half .and. &
@@ -200,9 +209,22 @@ contains
                             simulation_result%mean_mu(it, ip, iq)**2
                     end if
                 end do
+                !$omp critical(simulation_progress)
+                completed_patterns = completed_patterns + 1_int64
+                progress_percent = int(100_int64 * completed_patterns / total_patterns)
+                if (progress_percent > last_percent) then
+                    write(output_unit, '(a,i0,a)') 'progress: ', progress_percent, '%'
+                    flush(output_unit)
+                    last_percent = progress_percent
+                end if
+                !$omp end critical(simulation_progress)
             end do
         end do
         !$omp end parallel do
+        if (total_patterns == 0_int64) then
+            write(output_unit, '(a)') 'progress: 100%'
+            flush(output_unit)
+        end if
     end function simulate
 
     subroutine accumulate_moments(local_model, simulation_result, time_step, ip, iq, active_count)
