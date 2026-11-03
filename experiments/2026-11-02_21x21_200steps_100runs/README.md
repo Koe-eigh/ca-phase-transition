@@ -17,6 +17,9 @@ The run produced `time_evolution.dat` (the source data for the moments),
 `phase_diagram.dat`, `time_evolution.png`, `phase_diagram.png`, and
 `time_evolution_comparison.png` here. These outputs are committed with this
 experiment so the plots can be reproduced from the `.dat` files. The
+phase diagram data retain the original mean active counts and add the
+reachable-site fraction using denominator 100 (`k=200`, even `L=200`).
+The plot scripts now use this fraction on a fixed 0–1 color scale. The
 comparison figure overlays
 `(p,q)=(0.75,0.50), (0.80,0.50), (0.75,0.75), (0.85,0.50)` in each panel.
 

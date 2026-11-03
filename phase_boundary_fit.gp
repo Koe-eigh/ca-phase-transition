@@ -1,8 +1,8 @@
-# Fit a quadratic phase boundary to an active-count heat map.
+# Fit a quadratic phase boundary to a reachable-site activity fraction heat map.
 #
 # Input format: phase_diagram.dat
-#   p q active_count
-# The boundary is defined by an active-count contour. Adjust boundary_level to
+#   p q active_count active_fraction
+# The boundary is defined by an active-fraction contour. Adjust boundary_level to
 # choose which part of the transition band should be fitted.
 
 reset
@@ -14,14 +14,15 @@ set output 'phase_boundary_fit.png'
 set title 'DKCA phase boundary fit'
 set xlabel 'p'
 set ylabel 'q'
-set cblabel 'active sites'
+set cblabel 'active fraction of reachable sites'
+set cbrange [0:1]
 
 # Display the heat map on ordinary linear p-q axes.
 unset logscale
 set xrange [0:1]
 set yrange [0:1]
 
-boundary_level = 10.0
+boundary_level = 0.1
 
 # Extract the actual level contour, rather than fitting binary labels over
 # the whole heat map. Linear contour interpolation retains the data geometry.
@@ -31,7 +32,7 @@ set cntrparam linear
 set cntrparam levels discrete boundary_level
 unset surface
 set table $boundary_points
-splot datafile using 1:2:3
+splot datafile using 1:2:4
 unset table
 unset contour
 set surface
@@ -77,7 +78,7 @@ set table 'fitted_boundary.dat'
 plot [p=b:curve_p_max] boundary(p) notitle
 unset table
 
-splot datafile using 1:2:3 with pm3d notitle, \
+splot datafile using 1:2:4 with pm3d notitle, \
       $boundary_points using (column(-1) == selected_component ? $1 : 1/0):2:3 with lines lw 2 lc rgb 'black' \
       title sprintf('observed level %.4g', boundary_level), \
       'fitted_boundary.dat' using 1:2:(0.5) with lines lw 3 lc rgb 'white' \

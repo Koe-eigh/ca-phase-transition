@@ -84,7 +84,19 @@ each `(p, q)` combination. If it is omitted, one simulation is run.
 If no arguments are supplied, the default values above are used.
 
 Each run writes `phase_diagram.dat` and `time_evolution.dat` in the current
-directory. `time_evolution.dat` has one row per `(p, q, k)`, including `k=0`,
+directory. `phase_diagram.dat` has columns `p q active_count active_fraction`.
+It retains the final-time mean active count over all trials and records
+`grid_size`, `final_step`, and `reachable_sites` in comment headers. With one
+initial active site on a periodic ring of size `L`, the number of sites
+reachable at step `k` is `min(k+1, L/2)` for even `L` and `min(k+1, L)` for odd
+`L`. The dimensionless `active_fraction = active_count / reachable_sites` lies
+between 0 and 1. It compares activity within the step's reachable set: for
+example, at `k=200`, `p=q=1` gives count 201 and fraction 1 on both 500 and
+800 site rings. Once the reachable set wraps around a ring, physical finite
+size effects can still change the dynamics; normalization does not remove
+those effects. The phase plots use the fraction and a fixed 0–1 color scale.
+
+`time_evolution.dat` has one row per `(p, q, k)`, including `k=0`,
 with columns:
 
 ```text
@@ -117,7 +129,7 @@ To compare several parameter pairs in one two-panel figure, run
 `time_evolution_comparison.png`; edit the `p_targets` and `q_targets` arrays in
 the script to choose other pairs.
 
-To fit the observed level-10 active-count contour in `phase_diagram.dat`, run
+To fit the observed level-0.1 active-fraction contour in `phase_diagram.dat`, run
 `gnuplot phase_boundary_fit.gp`. The script writes `phase_boundary_fit.png` and
 `fitted_boundary.dat`. It anchors the quadratic curve at the contour's
 interpolated intersection with `q=1` and fits its curvature to the longest

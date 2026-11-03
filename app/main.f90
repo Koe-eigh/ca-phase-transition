@@ -113,22 +113,37 @@ contains
         character(len=*), intent(in) :: data_filename
 
         integer :: data_unit, io_status
-        integer(kind=int32) :: ip, iq, final_step
+        integer(kind=int32) :: ip, iq, final_step, reachable_sites
 
         final_step = context%max_steps
+        ! Starting from one active site, each update changes the site parity.
+        ! On an even ring only one parity class is reachable at a time; on
+        ! an odd ring the step-two progression eventually visits every site.
+        if (mod(context%grid_size, 2_int32) == 0_int32) then
+            reachable_sites = int(min(int(final_step, int64) + 1_int64, &
+                                      int(context%grid_size / 2_int32, int64)), int32)
+        else
+            reachable_sites = int(min(int(final_step, int64) + 1_int64, &
+                                      int(context%grid_size, int64)), int32)
+        end if
 
         open(newunit=data_unit, file=data_filename, status='replace', action='write', &
              iostat=io_status)
         if (io_status /= 0) error stop 'Could not open phase diagram data file'
 
         write(data_unit, '(a,i0)') '# seed: ', simulation_result%seed
-        write(data_unit, '(a)') '# p q active_count'
+        write(data_unit, '(a,i0)') '# grid_size: ', context%grid_size
+        write(data_unit, '(a,i0)') '# final_step: ', final_step
+        write(data_unit, '(a,i0)') '# reachable_sites: ', reachable_sites
+        write(data_unit, '(a)') '# active_fraction = active_count / reachable_sites'
+        write(data_unit, '(a)') '# p q active_count active_fraction'
         do iq = 1, context%q_steps
             do ip = 1, context%p_steps
                 if (context%cut_p_below_half .and. context%p_values(ip) < 0.5_real64) cycle
-                write(data_unit, '(es24.16,1x,es24.16,1x,es24.16)') &
+                write(data_unit, '(3(es24.16,1x),es24.16)') &
                     context%p_values(ip), context%q_values(iq), &
-                    simulation_result%active_count(final_step, ip, iq)
+                    simulation_result%active_count(final_step, ip, iq), &
+                    simulation_result%active_count(final_step, ip, iq) / real(reachable_sites, real64)
             end do
             if (iq < context%q_steps) write(data_unit, *)
         end do
