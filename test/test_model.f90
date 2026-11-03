@@ -1,14 +1,18 @@
 program test_model
-    use, intrinsic :: iso_fortran_env, only: int32, real64
+    use, intrinsic :: iso_fortran_env, only: int32, int64, real64
     use, intrinsic :: ieee_arithmetic, only: ieee_is_nan
+    use omp_lib, only: omp_set_num_threads
     use model, only: DKCA_t, DKCA
     use simulator_module, only: SimulationContext, Simulator, Simulator_t, SimulationResult_t
     implicit none
     type(DKCA_t) :: automaton
+    type(DKCA_t) :: larger_automaton
     type(Simulator_t) :: sim
     type(SimulationResult_t) :: result
+    type(SimulationResult_t) :: seeded_result, repeated_result
     real(real64) :: mu, sigma2
     integer(kind=int32) :: transition_count
+    integer(kind=int32) :: small_state(-15:15), large_state(-20:20), step_index
 
     automaton = DKCA([1_int32, 0_int32, 0_int32, 1_int32, 0_int32], -2_int32)
     call automaton%current_spatial_moments(2_int32, mu, sigma2)
@@ -73,7 +77,58 @@ program test_model
     if (.not. ieee_is_nan(result%variance_mu(1, 1, 1))) error stop 'Undefined variance_mu must be NaN'
     if (.not. ieee_is_nan(result%mean_sigma2(1, 1, 1))) error stop 'Undefined mean_sigma2 must be NaN'
 
+    ! Streams belong to parameter points and trials, independent of scheduling.
+    sim = Simulator(SimulationContext(3_int32, 3_int32, 20_int32, 31_int32, 7_int32, &
+                                      seed=123456789_int64))
+    call omp_set_num_threads(1)
+    seeded_result = sim%simulate()
+    if (seeded_result%seed /= 123456789_int64) error stop 'Effective seed was not recorded'
+    repeated_result = sim%simulate()
+    call check_same_results(seeded_result, repeated_result)
+    call omp_set_num_threads(4)
+    repeated_result = sim%simulate()
+    call check_same_results(seeded_result, repeated_result)
+    sim = Simulator(SimulationContext(3_int32, 3_int32, 20_int32, 31_int32, 7_int32, &
+                                      seed=987654321_int64))
+    repeated_result = sim%simulate()
+    if (all(seeded_result%active_count == repeated_result%active_count)) &
+        error stop 'Different seeds produced the same observations'
+
+    ! Matching coordinates receive matching random draws on different rings.
+    small_state = 0_int32
+    large_state = 0_int32
+    small_state(0) = 1_int32
+    large_state(0) = 1_int32
+    automaton = DKCA(small_state, -15_int32)
+    larger_automaton = DKCA(large_state, -20_int32)
+    call automaton%seed_stream(42_int64, 1_int32, 1_int32, 1_int32)
+    call larger_automaton%seed_stream(42_int64, 1_int32, 1_int32, 1_int32)
+    do step_index = 1, 6
+        call automaton%step(0.7_real64, 0.4_real64)
+        call larger_automaton%step(0.7_real64, 0.4_real64)
+        if (any(automaton%state /= larger_automaton%state(-15:15))) &
+            error stop 'Matching sites diverged before periodic wrap'
+    end do
+
 contains
+    subroutine check_same_results(first, second)
+        type(SimulationResult_t), intent(in) :: first, second
+
+        if (any(first%active_count /= second%active_count)) error stop 'Seeded mean_N changed'
+        if (any(first%survivor_count /= second%survivor_count)) error stop 'Seeded survivors changed'
+        call check_same_reals(first%mean_mu, second%mean_mu)
+        call check_same_reals(first%mean_mu2, second%mean_mu2)
+        call check_same_reals(first%variance_mu, second%variance_mu)
+        call check_same_reals(first%mean_sigma2, second%mean_sigma2)
+    end subroutine check_same_results
+
+    subroutine check_same_reals(first, second)
+        real(real64), intent(in) :: first(:, :, :), second(:, :, :)
+
+        if (any(ieee_is_nan(first) .neqv. ieee_is_nan(second))) error stop 'Seeded NaN mask changed'
+        if (any(first /= second .and. .not. ieee_is_nan(first))) error stop 'Seeded moments changed'
+    end subroutine check_same_reals
+
     subroutine check_close(actual, expected)
         real(real64), intent(in) :: actual, expected
         if (ieee_is_nan(actual)) error stop 'Unexpected NaN moment'

@@ -63,6 +63,23 @@ the order `p_steps q_steps max_steps grid_size simulation_count`:
 fpm run --profile release -- 21 21 200 200 10
 ```
 
+Pass `--seed` with a signed 64-bit integer to reproduce a run:
+
+```sh
+OMP_NUM_THREADS=4 fpm run --profile release -- 21 21 200 200 10 --seed 42
+```
+
+Without `--seed`, a seed is taken from the system clock. The effective seed is
+printed at startup and recorded in a `# seed: N` comment at the top of both
+output files. Reuse it with the same executable and simulation parameters to
+reproduce the results. Each parameter-index pair and trial has its own random
+draws, so
+changing `OMP_NUM_THREADS` preserves the results, including the order of data
+rows. Matching parameter indices, trial, time, and site coordinates also receive the same
+random draw on different grid sizes, allowing comparisons before periodic
+boundary effects occur. The random generator is implemented in this project;
+results may change if it or the simulation algorithm changes in a later version.
+
 `simulation_count` controls how many independent simulations are averaged for
 each `(p, q)` combination. If it is omitted, one simulation is run.
 If no arguments are supplied, the default values above are used.

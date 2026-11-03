@@ -21,8 +21,9 @@ At `q=0.5`, `k=200`:
 | 0.85 | 91 | 54.21 | 284.3 | 3705.4 |
 
 The corresponding 200-site values are `470.3, 529.7` for `p=0.75` and
-`47.5, 3095.7` for `p=0.85` (mean_mu2, mean_sigma2). Random seeds are not
-fixed, so exact differences combine grid-size effects and sampling variation.
+`47.5, 3095.7` for `p=0.85` (mean_mu2, mean_sigma2). These historical runs
+predate `--seed`, so their exact differences combine grid-size effects and
+sampling variation. New comparisons can reuse the same recorded seed.
 The 800-site time series continues to rise at late times. The historical
 200-site moment values cannot quantify the finite-size effect after the
 periodic-wrap cutoff.

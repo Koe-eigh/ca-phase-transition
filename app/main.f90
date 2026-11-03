@@ -1,5 +1,5 @@
 program main
-    use, intrinsic :: iso_fortran_env, only: int32, real64
+    use, intrinsic :: iso_fortran_env, only: int32, int64, real64
     use simulator_module, only: SimulationContext_t, SimulationContext, &
                                 Simulator_t, Simulator, SimulationResult_t
     implicit none
@@ -12,15 +12,17 @@ program main
     integer(kind=int32), parameter :: DEFAULT_SIMULATION_COUNT = 1_int32
 
     integer(kind=int32) :: p_steps, q_steps, max_steps, grid_size, simulation_count
+    integer(kind=int64) :: seed
     logical :: cut_p_below_half
     
     type(SimulationContext_t) :: context
     type(Simulator_t) :: sim
     type(SimulationResult_t) :: sim_result
 
-    call parse_command_line(p_steps, q_steps, max_steps, grid_size, simulation_count, cut_p_below_half)
+    call parse_command_line(p_steps, q_steps, max_steps, grid_size, simulation_count, cut_p_below_half, seed)
 
-    context = SimulationContext(p_steps, q_steps, max_steps, grid_size, simulation_count, cut_p_below_half)
+    context = SimulationContext(p_steps, q_steps, max_steps, grid_size, simulation_count, cut_p_below_half, seed)
+    print '(a,i0)', 'seed: ', context%seed
     sim = Simulator(context)
     sim_result = sim%simulate()
 
@@ -30,10 +32,11 @@ program main
     print *, 'wrote time_evolution.dat'
 
 contains
-    subroutine parse_command_line(p_steps, q_steps, max_steps, grid_size, simulation_count, cut_p_below_half)
+    subroutine parse_command_line(p_steps, q_steps, max_steps, grid_size, simulation_count, cut_p_below_half, seed)
         integer(kind=int32), intent(out) :: p_steps, q_steps, max_steps, grid_size, simulation_count
         logical, intent(out) :: cut_p_below_half
-        integer :: argument_count
+        integer(kind=int64), intent(out) :: seed
+        integer :: argument_count, argument_index, positional_count
         character(len=64) :: option
 
         p_steps = DEFAULT_P_STEPS
@@ -42,33 +45,54 @@ contains
         grid_size = DEFAULT_GRID_SIZE
         simulation_count = DEFAULT_SIMULATION_COUNT
         cut_p_below_half = .false.
+        call system_clock(count=seed)
 
         argument_count = command_argument_count()
-        if (argument_count == 0) return
-        if (argument_count < 4 .or. argument_count > 6) then
-            error stop 'Usage: ca-phase-transition [p_steps q_steps max_steps grid_size [simulation_count]] [--cut-p-below-half]'
-        end if
-
-        call read_integer_argument(1, p_steps)
-        call read_integer_argument(2, q_steps)
-        call read_integer_argument(3, max_steps)
-        call read_integer_argument(4, grid_size)
-        if (argument_count >= 5) then
-            call get_command_argument(5, option)
-            if (trim(option) == '--cut-p-below-half') then
+        argument_index = 1
+        positional_count = 0
+        do while (argument_index <= argument_count)
+            call get_command_argument(argument_index, option)
+            select case (trim(option))
+            case ('--cut-p-below-half')
                 cut_p_below_half = .true.
-            else
-                call read_integer_argument(5, simulation_count)
-            end if
-        end if
-        if (argument_count == 6) then
-            call get_command_argument(6, option)
-            if (trim(option) /= '--cut-p-below-half') then
-                error stop 'Unknown option; expected --cut-p-below-half'
-            end if
-            cut_p_below_half = .true.
-        end if
+            case ('--seed')
+                argument_index = argument_index + 1
+                if (argument_index > argument_count) error stop 'Missing value for --seed'
+                call read_seed_argument(argument_index, seed)
+            case default
+                if (index(option, '--') == 1) error stop 'Unknown option'
+                positional_count = positional_count + 1
+                select case (positional_count)
+                case (1)
+                    call read_integer_argument(argument_index, p_steps)
+                case (2)
+                    call read_integer_argument(argument_index, q_steps)
+                case (3)
+                    call read_integer_argument(argument_index, max_steps)
+                case (4)
+                    call read_integer_argument(argument_index, grid_size)
+                case (5)
+                    call read_integer_argument(argument_index, simulation_count)
+                case default
+                    error stop 'Too many positional arguments'
+                end select
+            end select
+            argument_index = argument_index + 1
+        end do
+        if (positional_count /= 0 .and. positional_count < 4) &
+            error stop 'Usage: ca-phase-transition [p_steps q_steps max_steps grid_size [count]] [--seed N] [--cut-p-below-half]'
     end subroutine parse_command_line
+
+    subroutine read_seed_argument(argument_number, value)
+        integer, intent(in) :: argument_number
+        integer(kind=int64), intent(out) :: value
+        character(len=64) :: argument
+        integer :: io_status
+
+        call get_command_argument(argument_number, argument)
+        read(argument, *, iostat=io_status) value
+        if (io_status /= 0) error stop 'Seed must be a signed 64-bit integer'
+    end subroutine read_seed_argument
 
     subroutine read_integer_argument(argument_number, value)
         integer, intent(in) :: argument_number
@@ -97,6 +121,7 @@ contains
              iostat=io_status)
         if (io_status /= 0) error stop 'Could not open phase diagram data file'
 
+        write(data_unit, '(a,i0)') '# seed: ', simulation_result%seed
         write(data_unit, '(a)') '# p q active_count'
         do iq = 1, context%q_steps
             do ip = 1, context%p_steps
@@ -119,6 +144,7 @@ contains
 
         open(newunit=data_unit, file=data_filename, status='replace', action='write', iostat=io_status)
         if (io_status /= 0) error stop 'Could not open time evolution data file'
+        write(data_unit, '(a,i0)') '# seed: ', simulation_result%seed
         write(data_unit, '(a)') '# p q k mean_N survivor_count mean_mu mean_mu2 variance_mu mean_sigma2'
         do iq = 1, context%q_steps
             do ip = 1, context%p_steps

@@ -1,5 +1,5 @@
 module model
-    use, intrinsic :: iso_fortran_env, only: int32, real64
+    use, intrinsic :: iso_fortran_env, only: int32, int64, real64
     use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
     implicit none
     private
@@ -11,13 +11,16 @@ module model
         integer(kind=int32), allocatable :: initial_state(:)
         integer(kind=int32), allocatable :: next_state(:)
         integer(kind=int32) :: time_step = 0_int32
+        integer(kind=int64) :: rng_state = 1_int64
     contains
         procedure :: reset
+        procedure :: seed_stream
         procedure :: step
         procedure :: current_active_count
         procedure :: current_spatial_moments
         procedure :: spatial_moments_defined
         procedure, private :: periodic_index
+        procedure, private :: random_unit
     end type DKCA_t
 
     interface DKCA
@@ -47,6 +50,46 @@ contains
         dkca%time_step = 0_int32
     end subroutine reset
 
+    subroutine seed_stream(dkca, seed, ip, iq, trial)
+        class(DKCA_t), intent(inout) :: dkca
+        integer(kind=int64), intent(in) :: seed
+        integer(kind=int32), intent(in) :: ip, iq, trial
+
+        ! Build a key tied to the work, rather than to its OpenMP worker.
+        dkca%rng_state = iand(seed, 2147483647_int64) + 1_int64
+        dkca%rng_state = mix_hash(dkca%rng_state, shiftr(seed, 31))
+        dkca%rng_state = mix_hash(dkca%rng_state, int(ip, int64))
+        dkca%rng_state = mix_hash(dkca%rng_state, int(iq, int64))
+        dkca%rng_state = mix_hash(dkca%rng_state, int(trial, int64))
+    end subroutine seed_stream
+
+    function mix_hash(state, value) result(mixed)
+        integer(kind=int64), intent(in) :: state, value
+        integer(kind=int64) :: mixed
+        integer :: round
+
+        ! Park-Miller arithmetic stays within int64 even for any signed
+        ! input seed or site coordinate; no signed overflow is required.
+        mixed = modulo(state + modulo(value, 2147483647_int64), 2147483647_int64)
+        if (mixed == 0_int64) mixed = 1_int64
+        do round = 1, 4
+            mixed = modulo(48271_int64 * mixed, 2147483647_int64)
+        end do
+    end function mix_hash
+
+    function random_unit(dkca, site) result(value)
+        class(DKCA_t), intent(in) :: dkca
+        integer(kind=int32), intent(in) :: site
+        real(real64) :: value
+        integer(kind=int64) :: bits
+
+        ! Counter-based draws give the same site/time sample on different
+        ! grid sizes until their physical evolution diverges at a boundary.
+        bits = mix_hash(dkca%rng_state, int(dkca%time_step, int64) + 1_int64)
+        bits = mix_hash(bits, int(site, int64))
+        value = real(bits, real64) / 2147483647.0_real64
+    end function random_unit
+
     subroutine step(dkca, p, q, active_count)
         class(DKCA_t), intent(inout) :: dkca
         real(real64), intent(in) :: p, q
@@ -68,7 +111,7 @@ contains
                 probability = p
             end if
 
-            call random_number(random_value)
+            random_value = dkca%random_unit(j)
             if (random_value < probability) then
                 dkca%next_state(j) = 1_int32
             else
