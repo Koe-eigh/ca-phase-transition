@@ -1,6 +1,7 @@
 program test_model
     use, intrinsic :: iso_fortran_env, only: int32, int64, real64
-    use, intrinsic :: ieee_arithmetic, only: ieee_is_nan
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite, ieee_is_nan, ieee_value, &
+                                            ieee_quiet_nan, ieee_positive_inf, ieee_negative_inf
     use omp_lib, only: omp_set_num_threads
     use model, only: DKCA_t, DKCA
     use simulator_module, only: SimulationContext, Simulator, Simulator_t, SimulationResult_t
@@ -11,8 +12,25 @@ program test_model
     type(SimulationResult_t) :: result
     type(SimulationResult_t) :: seeded_result, repeated_result
     real(real64) :: mu, sigma2
+    logical :: close_result
     integer(kind=int32) :: transition_count
     integer(kind=int32) :: small_state(-15:15), large_state(-20:20), step_index
+
+    ! Exercise the assertion itself, including values for which subtraction
+    ! and comparison alone cannot establish a finite match.
+    call check_close(1.0_real64, 1.0_real64, close_result)
+    if (.not. close_result) error stop 'check_close rejected equal finite values'
+    call check_close(1.0_real64 + 2.0e-12_real64, 1.0_real64, close_result)
+    if (close_result) error stop 'check_close accepted a finite mismatch'
+    call check_close(ieee_value(0.0_real64, ieee_quiet_nan), 1.0_real64, close_result)
+    if (close_result) error stop 'check_close accepted NaN'
+    call check_close(ieee_value(0.0_real64, ieee_positive_inf), 1.0_real64, close_result)
+    if (close_result) error stop 'check_close accepted positive infinity'
+    call check_close(ieee_value(0.0_real64, ieee_negative_inf), 1.0_real64, close_result)
+    if (close_result) error stop 'check_close accepted negative infinity'
+    call check_close(ieee_value(0.0_real64, ieee_positive_inf), &
+                     ieee_value(0.0_real64, ieee_positive_inf), close_result)
+    if (close_result) error stop 'check_close accepted matching infinities'
 
     automaton = DKCA([1_int32, 0_int32, 0_int32, 1_int32, 0_int32], -2_int32)
     call automaton%current_spatial_moments(2_int32, mu, sigma2)
@@ -129,10 +147,20 @@ contains
         if (any(first /= second .and. .not. ieee_is_nan(first))) error stop 'Seeded moments changed'
     end subroutine check_same_reals
 
-    subroutine check_close(actual, expected)
+    subroutine check_close(actual, expected, matches)
         real(real64), intent(in) :: actual, expected
-        if (ieee_is_nan(actual)) error stop 'Unexpected NaN moment'
-        if (abs(actual - expected) > 1.0e-12_real64) error stop 'Moment mismatch'
+        logical, intent(out), optional :: matches
+        logical :: is_close
+
+        is_close = .false.
+        if (ieee_is_finite(actual) .and. ieee_is_finite(expected)) then
+            is_close = abs(actual - expected) <= 1.0e-12_real64
+        end if
+        if (present(matches)) then
+            matches = is_close
+        else
+            if (.not. is_close) error stop 'Moment mismatch or non-finite value'
+        end if
     end subroutine check_close
 end program test_model
 
