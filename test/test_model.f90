@@ -8,12 +8,24 @@ program test_model
     type(Simulator_t) :: sim
     type(SimulationResult_t) :: result
     real(real64) :: mu, sigma2
+    integer(kind=int32) :: transition_count
 
     automaton = DKCA([1_int32, 0_int32, 0_int32, 1_int32, 0_int32], -2_int32)
     call automaton%current_spatial_moments(2_int32, mu, sigma2)
     call check_close(mu, -0.5_real64)
     call check_close(sigma2, 2.25_real64)
     if (lbound(automaton%state, 1) /= -2) error stop 'Coordinate origin was lost'
+
+    ! Boundary probabilities exercise both deterministic transition outcomes.
+    automaton = DKCA([0_int32, 1_int32, 0_int32, 0_int32, 0_int32])
+    call automaton%step(1.0_real64, 1.0_real64, active_count=transition_count)
+    if (any(automaton%state /= [1_int32, 0_int32, 1_int32, 0_int32, 0_int32])) &
+        error stop 'Certain transitions produced the wrong state'
+    if (transition_count /= 2_int32) error stop 'Certain transition count mismatch'
+    call automaton%reset()
+    call automaton%step(0.0_real64, 0.0_real64, active_count=transition_count)
+    if (any(automaton%state /= 0_int32)) error stop 'Impossible transitions stayed active'
+    if (transition_count /= 0_int32) error stop 'Impossible transition count mismatch'
 
     ! At p=q=1, a single seed produces sites -1,+1 at k=1 and -2,0,+2 at k=2.
     sim = Simulator(SimulationContext(2_int32, 2_int32, 3_int32, 5_int32, 3_int32))
