@@ -98,7 +98,8 @@ To compare several parameter pairs in one two-panel figure, run
 the script to choose other pairs.
 
 To skip calculations for parameter combinations with `p < 0.5`, add the optional
-flag. The skipped cells remain zero in the output:
+flag. Skipped combinations are omitted from both data files; a zero in
+`phase_diagram.dat` always represents a calculated result:
 
 ```sh
 fpm run --profile release -- 21 21 200 200 10 --cut-p-below-half
