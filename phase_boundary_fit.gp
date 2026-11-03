@@ -36,12 +36,28 @@ unset table
 unset contour
 set surface
 
+# A contour table separates disconnected curves with blank lines. Gnuplot's
+# pseudocolumn -1 identifies each curve; keep the longest phase-boundary branch.
+stats $boundary_points using (column(-1)) nooutput
+component_count = int(STATS_max) + 1
+selected_component = -1
+selected_count = 0
+do for [component=0:component_count-1] {
+    stats $boundary_points using (column(-1) == component ? $1 : 1/0) nooutput
+    if (STATS_records > selected_count) {
+        selected_component = component
+        selected_count = STATS_records
+    }
+}
+if (selected_count < 3) { print 'No contour branch with at least three points'; exit status 1 }
+print sprintf('Fitting contour component %d (%d points)', selected_component, selected_count)
+
 # Fix the vertex at (0.5, 1); fit only the curvature a.
 b = 0.5
 a = -10.0
 c = 1.0
 boundary(p) = a*(p-b)**2 + c
-fit boundary(x) $boundary_points using 1:2 via a
+fit boundary(x) $boundary_points using (column(-1) == selected_component ? $1 : 1/0):2 via a
 
 set view map
 set pm3d map
@@ -58,7 +74,7 @@ plot [p=b:curve_p_max] boundary(p) notitle
 unset table
 
 splot datafile using 1:2:3 with pm3d notitle, \
-      $boundary_points using 1:2:3 with lines lw 2 lc rgb 'black' \
+      $boundary_points using (column(-1) == selected_component ? $1 : 1/0):2:3 with lines lw 2 lc rgb 'black' \
       title sprintf('observed level %.4g', boundary_level), \
       'fitted_boundary.dat' using 1:2:(0.5) with lines lw 3 lc rgb 'white' \
       title sprintf('level %.4g: q = %.4g (p - %.4g)^2 + %.4g (b,c fixed)', boundary_level, a, b, c)
