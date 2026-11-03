@@ -77,6 +77,12 @@ initial active site (`j=0`). `mean_mu`, `mean_mu2`, and `mean_sigma2` average
 over surviving trials at that time step; `variance_mu = mean_mu2 - mean_mu^2`.
 `mean_N` averages over all trials, including extinct ones. When no trial
 survives, the four moment columns are `NaN` and `survivor_count` is zero.
+Spatial moments use coordinates centered on the initial seed only while its
+possible activity cone has not wrapped around the periodic grid. From time
+step `ceil(grid_size / 2)` onward, the four moment columns are `NaN`, even
+when trials survive; `mean_N` and `survivor_count` remain available. This
+conservative cutoff avoids interpreting fixed array coordinates as distances
+on an unbounded lattice after periodic wraparound.
 
 To plot `mean_mu2` and `mean_sigma2` against time for one parameter pair, run:
 
