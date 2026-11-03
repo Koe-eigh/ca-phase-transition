@@ -1,5 +1,6 @@
 module model
     use, intrinsic :: iso_fortran_env, only: int32, real64
+    use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
     implicit none
     private
 
@@ -9,11 +10,13 @@ module model
         integer(kind=int32), allocatable :: state(:)
         integer(kind=int32), allocatable :: initial_state(:)
         integer(kind=int32), allocatable :: next_state(:)
+        integer(kind=int32) :: time_step = 0_int32
     contains
         procedure :: reset
         procedure :: step
         procedure :: current_active_count
         procedure :: current_spatial_moments
+        procedure :: spatial_moments_defined
         procedure, private :: periodic_index
     end type DKCA_t
 
@@ -34,12 +37,14 @@ contains
         allocate(dkca%next_state(first:first + size(initial_state) - 1))
         dkca%state = initial_state
         dkca%initial_state = initial_state
+        dkca%time_step = 0_int32
     end function init
 
     subroutine reset(dkca)
         class(DKCA_t), intent(inout) :: dkca
 
         dkca%state = dkca%initial_state
+        dkca%time_step = 0_int32
     end subroutine reset
 
     subroutine step(dkca, p, q, active_count)
@@ -69,6 +74,7 @@ contains
         end do
 
         dkca%state = dkca%next_state
+        dkca%time_step = dkca%time_step + 1_int32
         if (present(active_count)) active_count = next_active_count
     end subroutine step
 
@@ -86,6 +92,11 @@ contains
         integer(kind=int32) :: j
 
         if (active_count <= 0_int32) error stop 'Spatial moments require active sites'
+        if (.not. dkca%spatial_moments_defined()) then
+            mu = ieee_value(0.0_real64, ieee_quiet_nan)
+            sigma2 = ieee_value(0.0_real64, ieee_quiet_nan)
+            return
+        end if
         mu = 0.0_real64
         do j = lbound(dkca%state, 1), ubound(dkca%state, 1)
             if (dkca%state(j) /= 0_int32) mu = mu + real(j, real64)
@@ -98,6 +109,14 @@ contains
         end do
         sigma2 = sigma2 / real(active_count, real64)
     end subroutine current_spatial_moments
+
+    function spatial_moments_defined(dkca) result(defined)
+        class(DKCA_t), intent(in) :: dkca
+        logical :: defined
+
+        ! A single seed can first wrap around the ring after ceil(n / 2) steps.
+        defined = dkca%time_step < (size(dkca%state) + 1) / 2
+    end function spatial_moments_defined
 
     function periodic_index(dkca, index) result(wrapped_index)
         class(DKCA_t), intent(in) :: dkca

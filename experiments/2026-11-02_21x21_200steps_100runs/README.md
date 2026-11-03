@@ -32,3 +32,8 @@ For `(p,q)=(0.8,0.5)`:
 The two moment averages use surviving trials at each time step. `mean_N`
 uses all 100 trials. The program does not set a fixed random seed, so a new
 run will give different numerical values.
+
+These committed data were generated before the periodic-wrap cutoff was
+introduced. For a 200-site ring, spatial moments from `k=100` onward can be
+distorted by wrapped coordinates and should not be interpreted as unbounded
+lattice moments. New runs write `NaN` for those columns from `k=100` onward.

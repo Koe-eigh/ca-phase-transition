@@ -176,7 +176,8 @@ contains
                     simulation_result%active_count(:, ip, iq) / &
                     real(sim%context%simulation_count, real64)
                 do it = 0, sim%context%max_steps
-                    if (simulation_result%survivor_count(it, ip, iq) == 0_int32) then
+                    if (simulation_result%survivor_count(it, ip, iq) == 0_int32 .or. &
+                        it >= (sim%context%grid_size + 1_int32) / 2_int32) then
                         simulation_result%mean_mu(it, ip, iq) = ieee_value(0.0_real64, ieee_quiet_nan)
                         simulation_result%mean_mu2(it, ip, iq) = ieee_value(0.0_real64, ieee_quiet_nan)
                         simulation_result%variance_mu(it, ip, iq) = ieee_value(0.0_real64, ieee_quiet_nan)
@@ -204,9 +205,10 @@ contains
         real(real64) :: mu, sigma2
 
         if (active_count == 0_int32) return
-        call local_model%current_spatial_moments(active_count, mu, sigma2)
         simulation_result%survivor_count(time_step, ip, iq) = &
             simulation_result%survivor_count(time_step, ip, iq) + 1_int32
+        if (.not. local_model%spatial_moments_defined()) return
+        call local_model%current_spatial_moments(active_count, mu, sigma2)
         simulation_result%mean_mu(time_step, ip, iq) = simulation_result%mean_mu(time_step, ip, iq) + mu
         simulation_result%mean_mu2(time_step, ip, iq) = simulation_result%mean_mu2(time_step, ip, iq) + mu**2
         simulation_result%mean_sigma2(time_step, ip, iq) = &

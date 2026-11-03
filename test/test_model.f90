@@ -16,7 +16,7 @@ program test_model
     if (lbound(automaton%state, 1) /= -2) error stop 'Coordinate origin was lost'
 
     ! At p=q=1, a single seed produces sites -1,+1 at k=1 and -2,0,+2 at k=2.
-    sim = Simulator(SimulationContext(2_int32, 2_int32, 2_int32, 5_int32, 3_int32))
+    sim = Simulator(SimulationContext(2_int32, 2_int32, 3_int32, 5_int32, 3_int32))
     result = sim%simulate()
     if (any(result%survivor_count(:, 2, 2) /= 3_int32)) error stop 'Survivor count mismatch'
     call check_close(result%active_count(2, 2, 2), 3.0_real64)
@@ -25,6 +25,33 @@ program test_model
     call check_close(result%variance_mu(2, 2, 2), 0.0_real64)
     call check_close(result%mean_sigma2(1, 2, 2), 1.0_real64)
     call check_close(result%mean_sigma2(2, 2, 2), 8.0_real64 / 3.0_real64)
+    if (result%survivor_count(3, 2, 2) /= 3_int32) error stop 'Wrapped survivors were lost'
+    call check_close(result%active_count(3, 2, 2), 4.0_real64)
+    if (.not. ieee_is_nan(result%mean_mu(3, 2, 2))) error stop 'Wrapped mean_mu must be NaN'
+    if (.not. ieee_is_nan(result%mean_mu2(3, 2, 2))) error stop 'Wrapped mean_mu2 must be NaN'
+    if (.not. ieee_is_nan(result%variance_mu(3, 2, 2))) error stop 'Wrapped variance_mu must be NaN'
+    if (.not. ieee_is_nan(result%mean_sigma2(3, 2, 2))) error stop 'Wrapped mean_sigma2 must be NaN'
+
+    automaton = DKCA([0_int32, 0_int32, 1_int32, 0_int32, 0_int32], -2_int32)
+    call automaton%step(1.0_real64, 1.0_real64)
+    call automaton%step(1.0_real64, 1.0_real64)
+    call automaton%current_spatial_moments(3_int32, mu, sigma2)
+    call check_close(sigma2, 8.0_real64 / 3.0_real64)
+    call automaton%step(1.0_real64, 1.0_real64)
+    call automaton%current_spatial_moments(4_int32, mu, sigma2)
+    if (.not. ieee_is_nan(mu) .or. .not. ieee_is_nan(sigma2)) &
+        error stop 'Wrapped model moments must be NaN'
+    call automaton%reset()
+    call automaton%current_spatial_moments(1_int32, mu, sigma2)
+    call check_close(mu, 0.0_real64)
+
+    ! On an even ring, the opposite site is first reached at n/2 steps.
+    sim = Simulator(SimulationContext(2_int32, 2_int32, 3_int32, 6_int32))
+    result = sim%simulate()
+    call check_close(result%mean_sigma2(2, 2, 2), 8.0_real64 / 3.0_real64)
+    if (result%survivor_count(3, 2, 2) /= 1_int32) error stop 'Even-ring survivor was lost'
+    if (.not. ieee_is_nan(result%mean_sigma2(3, 2, 2))) &
+        error stop 'Even-ring wrapped moment must be NaN'
 
     ! At p=q=0 all trials are extinct from k=1 onward.
     if (result%survivor_count(1, 1, 1) /= 0_int32) error stop 'Extinct trials counted as survivors'
@@ -37,6 +64,7 @@ program test_model
 contains
     subroutine check_close(actual, expected)
         real(real64), intent(in) :: actual, expected
+        if (ieee_is_nan(actual)) error stop 'Unexpected NaN moment'
         if (abs(actual - expected) > 1.0e-12_real64) error stop 'Moment mismatch'
     end subroutine check_close
 end program test_model
