@@ -73,10 +73,9 @@ Without `--seed`, a seed is taken from the system clock. The effective seed is
 printed at startup and recorded in a `# seed: N` comment at the top of both
 output files. Reuse it with the same executable and simulation parameters to
 reproduce the results. Each parameter-index pair and trial has its own random
-draws, so
-changing `OMP_NUM_THREADS` preserves the results, including the order of data
-rows. Matching parameter indices, trial, time, and site coordinates also receive the same
-random draw on different grid sizes, allowing comparisons before periodic
+draws, so changing `OMP_NUM_THREADS` preserves the results, including the order
+of data rows. Matching parameter indices, trial, time, and site coordinates
+also receive the same random draw on different grid sizes before periodic
 boundary effects occur. The random generator is implemented in this project;
 results may change if it or the simulation algorithm changes in a later version.
 

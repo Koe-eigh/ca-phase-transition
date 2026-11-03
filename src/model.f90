@@ -20,7 +20,6 @@ module model
         procedure :: current_spatial_moments
         procedure :: spatial_moments_defined
         procedure, private :: periodic_index
-        procedure, private :: random_unit
     end type DKCA_t
 
     interface DKCA
@@ -77,16 +76,15 @@ contains
         end do
     end function mix_hash
 
-    function random_unit(dkca, site) result(value)
-        class(DKCA_t), intent(in) :: dkca
+    function random_unit(time_key, site) result(value)
+        integer(kind=int64), intent(in) :: time_key
         integer(kind=int32), intent(in) :: site
         real(real64) :: value
         integer(kind=int64) :: bits
 
         ! Counter-based draws give the same site/time sample on different
         ! grid sizes until their physical evolution diverges at a boundary.
-        bits = mix_hash(dkca%rng_state, int(dkca%time_step, int64) + 1_int64)
-        bits = mix_hash(bits, int(site, int64))
+        bits = mix_hash(time_key, int(site, int64))
         value = real(bits, real64) / 2147483647.0_real64
     end function random_unit
 
@@ -96,9 +94,11 @@ contains
         integer(kind=int32), intent(out), optional :: active_count
 
         integer(kind=int32) :: j, left, right, next_active_count
+        integer(kind=int64) :: time_key
         real(real64) :: probability, random_value
 
         next_active_count = 0_int32
+        time_key = mix_hash(dkca%rng_state, int(dkca%time_step, int64) + 1_int64)
         do j = lbound(dkca%state, 1), ubound(dkca%state, 1)
             left = dkca%state(dkca%periodic_index(j - 1))
             right = dkca%state(dkca%periodic_index(j + 1))
@@ -111,7 +111,7 @@ contains
                 probability = p
             end if
 
-            random_value = dkca%random_unit(j)
+            random_value = random_unit(time_key, j)
             if (random_value < probability) then
                 dkca%next_state(j) = 1_int32
             else
