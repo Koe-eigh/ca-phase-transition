@@ -1,4 +1,5 @@
 build/
+experiments/latest/
 *.dat
 *.png
 *.log
