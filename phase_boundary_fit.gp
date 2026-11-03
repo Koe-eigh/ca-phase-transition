@@ -52,19 +52,23 @@ do for [component=0:component_count-1] {
 if (selected_count < 3) { print 'No contour branch with at least three points'; exit status 1 }
 print sprintf('Fitting contour component %d (%d points)', selected_component, selected_count)
 
-# Fix the vertex at (0.5, 1); fit only the curvature a.
-b = 0.5
+# Anchor the vertex to the selected level contour's intersection with q=1.
+# This is a finite-time, level-dependent endpoint, not a theoretical critical point.
+stats $boundary_points using (column(-1) == selected_component && abs($2 - 1.0) < 1e-8 ? $1 : 1/0) nooutput
+if (STATS_records != 1) { print 'Selected contour must intersect q=1 exactly once'; exit status 1 }
+b = STATS_min
 a = -10.0
 c = 1.0
 boundary(p) = a*(p-b)**2 + c
 fit boundary(x) $boundary_points using (column(-1) == selected_component ? $1 : 1/0):2 via a
+print sprintf('Observed level %.4g endpoint at q=1: p=%.8g', boundary_level, b)
 
 set view map
 set pm3d map
 set palette defined (0 "#16324f", 0.5 "#f2c14e", 1 "#d1495b")
 set grid xtics ytics
 
-# Draw the right branch from the fixed vertex to q=0 (or p=1).
+# Draw the right branch from the observed endpoint to q=0 (or p=1).
 # This extends the fitted model beyond the observed contour's p range.
 curve_p_max = (a < 0 && c >= 0 ? b + sqrt(-c/a) : 1.0)
 curve_p_max = (curve_p_max < 1.0 ? curve_p_max : 1.0)
@@ -77,4 +81,4 @@ splot datafile using 1:2:3 with pm3d notitle, \
       $boundary_points using (column(-1) == selected_component ? $1 : 1/0):2:3 with lines lw 2 lc rgb 'black' \
       title sprintf('observed level %.4g', boundary_level), \
       'fitted_boundary.dat' using 1:2:(0.5) with lines lw 3 lc rgb 'white' \
-      title sprintf('level %.4g: q = %.4g (p - %.4g)^2 + %.4g (b,c fixed)', boundary_level, a, b, c)
+      title sprintf('level %.4g fit: q = %.4g (p - %.4g)^2 + 1 (endpoint from data)', boundary_level, a, b)

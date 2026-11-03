@@ -117,6 +117,13 @@ To compare several parameter pairs in one two-panel figure, run
 `time_evolution_comparison.png`; edit the `p_targets` and `q_targets` arrays in
 the script to choose other pairs.
 
+To fit the observed level-10 active-count contour in `phase_diagram.dat`, run
+`gnuplot phase_boundary_fit.gp`. The script writes `phase_boundary_fit.png` and
+`fitted_boundary.dat`. It anchors the quadratic curve at the contour's
+interpolated intersection with `q=1` and fits its curvature to the longest
+contour branch. The endpoint depends on the chosen level and finite simulation
+time; it is not an estimate of the theoretical critical point `(0.5, 1)`.
+
 To skip calculations for parameter combinations with `p < 0.5`, add the optional
 flag. Skipped combinations are omitted from both data files; a zero in
 `phase_diagram.dat` always represents a calculated result:
