@@ -34,7 +34,7 @@ assert paths and all(path.get("stroke") == "rgb(255, 255, 255)" for path in path
     "contour levels must all use white strokes"
 
 label_plots = [plot for plot in plots if any(
-    element.tag.endswith("tspan") and element.text == "10" for element in plot.iter()
+    element.tag.endswith("tspan") and element.text == "0.1" for element in plot.iter()
 )]
 assert len(label_plots) == 1, "expected one contour label plot"
 text_groups = [element for element in label_plots[0].iter() if element.tag.endswith("g")
@@ -43,6 +43,6 @@ assert text_groups and all(group.get("fill") == "rgb(255,255,255)" for group in 
     "contour labels must use white text"
 labels = {element.text for element in label_plots[0].iter()
           if element.tag.endswith("tspan") and element.text}
-assert {"10", "20", "30", "40", "50"} <= labels, \
+assert {"0.1", "0.2", "0.3", "0.4", "0.5"} <= labels, \
     "major contour values must appear on the plot"
 PY

@@ -1,10 +1,11 @@
 reset
 set terminal pngcairo size 1000,800
 set output 'phase_diagram_loglog.png'
-set title 'DKCA active sites at final time (log-log axes)'
+set title 'DKCA reachable-site activity fraction (log-log axes)'
 set xlabel 'p - 1/2'
 set ylabel '1 - q'
-set cblabel 'active sites'
+set cblabel 'active fraction of reachable sites'
+set cbrange [0:1]
 
 # Only p > 1/2 and q < 1 have positive coordinates on these axes.
 unset logscale
@@ -25,4 +26,4 @@ set pm3d map
 set palette defined (0 "#16324f", 0.5 "#f2c14e", 1 "#d1495b")
 set grid xtics ytics
 
-splot 'phase_diagram.dat' using ($1 > 0.5 ? $1 - 0.5 : 1/0):($2 < 1 ? 1 - $2 : 1/0):3 with pm3d notitle
+splot 'phase_diagram.dat' using ($1 > 0.5 ? $1 - 0.5 : 1/0):($2 < 1 ? 1 - $2 : 1/0):4 with pm3d notitle

@@ -29,6 +29,9 @@ The 800-site time series continues to rise at late times. The historical
 periodic-wrap cutoff.
 
 The generated `.dat` and comparison `.png` are committed with this experiment.
+The phase diagram data retain the original mean active counts and add the
+reachable-site fraction using denominator 201 (`k=200`, even `L=800`).
+The plot scripts use this fraction on a fixed 0–1 color scale.
 The committed 200-site comparison uses historical data from before the
 periodic-wrap cutoff; its spatial moments from `k=100` onward are not
 reliable as unbounded lattice moments. New 200-site runs mark them `NaN`.
