@@ -100,6 +100,7 @@ contains
         write(data_unit, '(a)') '# p q active_count'
         do iq = 1, context%q_steps
             do ip = 1, context%p_steps
+                if (context%cut_p_below_half .and. context%p_values(ip) < 0.5_real64) cycle
                 write(data_unit, '(es24.16,1x,es24.16,1x,es24.16)') &
                     context%p_values(ip), context%q_values(iq), &
                     simulation_result%active_count(final_step, ip, iq)
