@@ -1,0 +1,14 @@
+Experiment summary
+p_steps: 21
+q_steps: 21
+max_steps: 100
+grid_size: 801
+simulation_count: 20
+cut_p_below_half: T
+seed: 42
+completed_patterns: 231
+elapsed_seconds: .243551
+files: phase_diagram.dat, time_evolution.dat, summary.txt
+final_mean_active_count_min:   0.0000000000000000E+00
+final_mean_active_count_max:   1.0100000000000000E+02
+status: complete

@@ -15,6 +15,8 @@ program test_model
     logical :: close_result
     integer(kind=int32) :: transition_count
     integer(kind=int32) :: small_state(-15:15), large_state(-20:20), step_index
+    integer(kind=int32) :: mixed_state(400), trial, site
+    real(real64) :: adjacent_correlation
 
     ! Exercise the assertion itself, including values for which subtraction
     ! and comparison alone cannot establish a finite match.
@@ -134,6 +136,26 @@ program test_model
         if (any(automaton%state /= larger_automaton%state(-15:15))) &
             error stop 'Matching sites diverged before periodic wrap'
     end do
+
+    ! The 1100 pattern gives every site one active neighbor. At p=1/2,
+    ! adjacent outcomes should not retain the old spatial RNG correlation.
+    do site = 1, size(mixed_state)
+        mixed_state(site) = merge(1_int32, 0_int32, mod(site - 1, 4) < 2)
+    end do
+    automaton = DKCA(mixed_state)
+    adjacent_correlation = 0.0_real64
+    do trial = 1, 100
+        call automaton%reset()
+        call automaton%seed_stream(42_int64, 1_int32, 1_int32, trial)
+        call automaton%step(0.5_real64, 0.5_real64)
+        do site = 1, size(mixed_state)
+            adjacent_correlation = adjacent_correlation + &
+                real((2 * automaton%state(site) - 1) * &
+                     (2 * automaton%state(mod(site, size(mixed_state)) + 1) - 1), real64)
+        end do
+    end do
+    adjacent_correlation = adjacent_correlation / real(100 * size(mixed_state), real64)
+    if (abs(adjacent_correlation) > 0.1_real64) error stop 'Adjacent random draws are correlated'
 
 contains
     subroutine check_same_results(first, second)

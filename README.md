@@ -49,7 +49,7 @@ parameters, optional cut, and destination with Make variables:
 
 ```sh
 make experiment p_steps=21 q_steps=21 max_steps=200 grid_size=200 \
-  simulation_count=10 cut_p_below_half=true output_dir=experiments/my-run
+  simulation_count=10 cut_p_below_half=true seed=42 output_dir=experiments/my-run
 ```
 
 `cut_p_below_half` accepts `true` or `false` (the default). The output directory
@@ -58,6 +58,40 @@ contains `phase_diagram.dat`, `time_evolution.dat`, `summary.txt`, all seven
 parameter pairs and require enough sampled points for the boundary fit. The
 Make defaults use a 21-by-21 sweep with 10 trials per pair; smaller or noisier
 sweeps may fail during plotting.
+
+## Experiment matrix
+
+Run a factorial sweep over several experimental conditions with:
+
+```sh
+scripts/run-experiment-matrix.sh --list  # inspect all case IDs
+scripts/run-experiment-matrix.sh         # run all cases
+```
+
+The default matrix has 96 cases: 21 or 41 samples along each of `p` and `q`,
+100 or 200 time steps, 201/400/801 sites, 20 or 100 trials per parameter pair,
+with or without `p < 0.5` excluded, and seeds 42 or 43. The grid choices
+compare odd/even rings and whether activity can reach a periodic boundary
+within the run. The two seeds expose sampling variation; using the same seed
+across grid sizes supports paired comparisons. All cases are run in sequence,
+so the full matrix can take substantial time and disk space.
+
+Each case runs `make experiment` and has its own directory under
+`experiments/matrix/`, containing `phase_diagram.dat`, `time_evolution.dat`,
+`summary.txt`, seven `.png` figures, `fitted_boundary.dat`, and `run.log`.
+`cases.tsv` indexes all case settings and paths. Re-running the script skips
+cases only when the summary and all figures are complete; an interrupted case
+is re-run. Override the space-separated axis lists and destination to run a
+smaller or different matrix, for example:
+
+```sh
+SWEEP_SIZES=21 STEP_COUNTS=100 GRID_SIZES=201 TRIAL_COUNTS=20 \
+  CUT_MODES=false SEEDS=42 OUTPUT_ROOT=experiments/single \
+  scripts/run-experiment-matrix.sh
+```
+
+The standard figures use fixed parameter pairs and a fitted contour, so use
+at least 21 samples per parameter axis for custom matrices.
 
 The source supports Fortran 2018. For example, use
 `fpm test --flag '-std=f2018 -fopenmp'` to check the language standard with

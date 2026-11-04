@@ -71,13 +71,15 @@ contains
         integer(kind=int64) :: mixed
         integer :: round
 
-        ! Park-Miller arithmetic stays within int64 even for any signed
-        ! input seed or site coordinate; no signed overflow is required.
+        ! Interleave xor shifts with modular multiplication so nearby site
+        ! coordinates do not become an arithmetic progression of draws.
+        ! All products fit in int64; signed overflow is not required.
         mixed = modulo(state + modulo(value, 2147483647_int64), 2147483647_int64)
-        if (mixed == 0_int64) mixed = 1_int64
         do round = 1, 4
+            mixed = ieor(mixed, shiftr(mixed, 16 - round))
             mixed = modulo(48271_int64 * mixed, 2147483647_int64)
         end do
+        if (mixed == 0_int64) mixed = 1_int64
     end function mix_hash
 
     function random_unit(time_key, site) result(value)
