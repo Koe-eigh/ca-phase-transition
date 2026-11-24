@@ -1,5 +1,5 @@
 module dkca
-    use, intrinsic :: iso_fortran_env, only: int32, int64, real64
+    use, intrinsic :: iso_fortran_env, only: int8, int32, int64, real64
     use, intrinsic :: ieee_arithmetic, only: ieee_is_finite, ieee_is_nan, ieee_value, ieee_quiet_nan
     use random_hash, only: mix_hash, HASH_MODULUS
     implicit none
@@ -8,9 +8,9 @@ module dkca
     public :: DKCA_t, new_DKCA
 
     type :: DKCA_t
-        integer(kind=int32), allocatable :: state(:)
-        integer(kind=int32), allocatable :: initial_state(:)
-        integer(kind=int32), allocatable :: next_state(:)
+        integer(kind=int8), allocatable :: state(:)
+        integer(kind=int8), allocatable :: initial_state(:)
+        integer(kind=int8), allocatable :: next_state(:)
         integer(kind=int32) :: time_step = 0_int32
         integer(kind=int64) :: seed = 1_int64
         integer(kind=int32), private :: active_count
@@ -45,10 +45,10 @@ contains
         allocate(dkca%state(first:first + size(initial_state) - 1))
         allocate(dkca%initial_state(first:first + size(initial_state) - 1))
         allocate(dkca%next_state(first:first + size(initial_state) - 1))
-        dkca%state = initial_state
-        dkca%initial_state = initial_state
+        dkca%state = int(initial_state, int8)
+        dkca%initial_state = int(initial_state, int8)
         dkca%time_step = 0_int32
-        dkca%active_count = sum(initial_state)
+        dkca%active_count = count(initial_state == 1_int32, kind=int32)
         call dkca%clear_cache()
     end function init
 
@@ -57,7 +57,7 @@ contains
 
         dkca%state = dkca%initial_state
         dkca%time_step = 0_int32
-        dkca%active_count = sum(dkca%initial_state)
+        dkca%active_count = count(dkca%initial_state == 1_int8, kind=int32)
         call dkca%clear_cache()
     end subroutine reset
 
@@ -110,9 +110,9 @@ contains
 
             sample = random_value(step_seed, site)
             if (sample < probability) then
-                dkca%next_state(site) = 1_int32
+                dkca%next_state(site) = 1_int8
             else
-                dkca%next_state(site) = 0_int32
+                dkca%next_state(site) = 0_int8
             end if
             next_active_count = next_active_count + dkca%next_state(site)
         end do

@@ -8,6 +8,7 @@ program test_dkca
 
     call test_initial_state_and_spatial_moments()
     call test_deterministic_transitions()
+    call test_large_active_count_with_byte_storage()
     call test_one_site_ring()
     call test_current_state_moments_after_periodic_wrap()
     call test_cached_moments_follow_state_changes()
@@ -51,6 +52,21 @@ contains
         call check(automaton%current_active_count() == INACTIVE, &
                    'deterministic transitions: impossible transition count')
     end subroutine test_deterministic_transitions
+
+    subroutine test_large_active_count_with_byte_storage()
+        type(DKCA_t) :: automaton
+        integer(int32), parameter :: RING_SIZE = 256_int32
+        integer(int32) :: full_state(RING_SIZE)
+
+        full_state = ACTIVE
+        automaton = new_DKCA(full_state)
+        call check(storage_size(automaton%state(1)) == 8, 'state must use one byte per site')
+        call check(automaton%current_active_count() == RING_SIZE, 'byte storage: initial active count')
+        call automaton%step(CERTAIN, CERTAIN)
+        call check(automaton%current_active_count() == RING_SIZE, 'byte storage: active count after step')
+        call automaton%reset()
+        call check(automaton%current_active_count() == RING_SIZE, 'byte storage: active count after reset')
+    end subroutine test_large_active_count_with_byte_storage
 
     subroutine test_one_site_ring()
         type(DKCA_t) :: automaton
