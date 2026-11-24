@@ -4,12 +4,12 @@ program test_simulator
     use test_utils, only: check, check_close, check_nan, check_same_reals
     use simulator_module, only: SimulationContext, Simulator, Simulator_t, SimulationResult_t
     implicit none
-    integer(int32), parameter :: probability_endpoints = 2_int32
+    integer(int32), parameter :: PROBABILITY_ENDPOINTS = 2_int32
     ! Two sweep points represent probabilities 0 and 1, in that order.
-    integer(int32), parameter :: zero_index = 1_int32, one_index = 2_int32
-    integer(int32), parameter :: first_step = 1_int32, second_step = 2_int32, wrap_step = 3_int32
-    integer(int32), parameter :: odd_ring_size = 5_int32, even_ring_size = 6_int32
-    integer(int32), parameter :: deterministic_trials = 3_int32
+    integer(int32), parameter :: ZERO_INDEX = 1_int32, ONE_INDEX = 2_int32
+    integer(int32), parameter :: FIRST_STEP = 1_int32, SECOND_STEP = 2_int32, WRAP_STEP = 3_int32
+    integer(int32), parameter :: ODD_RING_SIZE = 5_int32, EVEN_RING_SIZE = 6_int32
+    integer(int32), parameter :: DETERMINISTIC_TRIALS = 3_int32
 
     call test_deterministic_growth()
     call test_odd_ring_wrap()
@@ -24,24 +24,24 @@ contains
 
         ! At p=q=1, a seed produces -1,+1 at k=1 and -2,0,+2 at k=2.
         ! Their spatial variances are 1 and (4+0+4)/3.
-        sim = Simulator(SimulationContext(p_steps=probability_endpoints, q_steps=probability_endpoints, &
-                                          max_steps=wrap_step, grid_size=odd_ring_size, &
-                                          simulation_count=deterministic_trials))
+        sim = Simulator(SimulationContext(p_steps=PROBABILITY_ENDPOINTS, q_steps=PROBABILITY_ENDPOINTS, &
+                                          max_steps=WRAP_STEP, grid_size=ODD_RING_SIZE, &
+                                          simulation_count=DETERMINISTIC_TRIALS))
         result = sim%simulate()
-        call check(all(result%survivor_count(:, one_index, one_index) &
-                       == deterministic_trials), &
+        call check(all(result%survivor_count(:, ONE_INDEX, ONE_INDEX) &
+                       == DETERMINISTIC_TRIALS), &
                    'deterministic growth: survivor count')
-        call check_close(result%active_count(second_step, one_index, one_index), &
+        call check_close(result%active_count(SECOND_STEP, ONE_INDEX, ONE_INDEX), &
                          3.0_real64, 'deterministic growth: active count')
-        call check_close(result%mean_mu(second_step, one_index, one_index), &
+        call check_close(result%mean_mu(SECOND_STEP, ONE_INDEX, ONE_INDEX), &
                          0.0_real64, 'deterministic growth: mean mu')
-        call check_close(result%mean_mu2(second_step, one_index, one_index), &
+        call check_close(result%mean_mu2(SECOND_STEP, ONE_INDEX, ONE_INDEX), &
                          0.0_real64, 'deterministic growth: mean mu squared')
-        call check_close(result%variance_mu(second_step, one_index, one_index), &
+        call check_close(result%variance_mu(SECOND_STEP, ONE_INDEX, ONE_INDEX), &
                          0.0_real64, 'deterministic growth: variance mu')
-        call check_close(result%mean_sigma2(first_step, one_index, one_index), &
+        call check_close(result%mean_sigma2(FIRST_STEP, ONE_INDEX, ONE_INDEX), &
                          1.0_real64, 'deterministic growth: variance at step 1')
-        call check_close(result%mean_sigma2(second_step, one_index, one_index), &
+        call check_close(result%mean_sigma2(SECOND_STEP, ONE_INDEX, ONE_INDEX), &
                          8.0_real64 / 3.0_real64, &
                          'deterministic growth: variance at step 2')
     end subroutine test_deterministic_growth
@@ -50,21 +50,21 @@ contains
         type(Simulator_t) :: sim
         type(SimulationResult_t) :: result
 
-        sim = Simulator(SimulationContext(p_steps=probability_endpoints, q_steps=probability_endpoints, &
-                                          max_steps=wrap_step, grid_size=odd_ring_size, &
-                                          simulation_count=deterministic_trials))
+        sim = Simulator(SimulationContext(p_steps=PROBABILITY_ENDPOINTS, q_steps=PROBABILITY_ENDPOINTS, &
+                                          max_steps=WRAP_STEP, grid_size=ODD_RING_SIZE, &
+                                          simulation_count=DETERMINISTIC_TRIALS))
         result = sim%simulate()
-        call check(result%survivor_count(wrap_step, one_index, one_index) &
-                   == deterministic_trials, 'odd ring: wrapped survivors')
-        call check_close(result%active_count(wrap_step, one_index, one_index), &
+        call check(result%survivor_count(WRAP_STEP, ONE_INDEX, ONE_INDEX) &
+                   == DETERMINISTIC_TRIALS, 'odd ring: wrapped survivors')
+        call check_close(result%active_count(WRAP_STEP, ONE_INDEX, ONE_INDEX), &
                          4.0_real64, 'odd ring: wrapped active count')
-        call check_nan(result%mean_mu(wrap_step, one_index, one_index), &
+        call check_nan(result%mean_mu(WRAP_STEP, ONE_INDEX, ONE_INDEX), &
                        'odd ring: wrapped mean mu')
-        call check_nan(result%mean_mu2(wrap_step, one_index, one_index), &
+        call check_nan(result%mean_mu2(WRAP_STEP, ONE_INDEX, ONE_INDEX), &
                        'odd ring: wrapped mean mu squared')
-        call check_nan(result%variance_mu(wrap_step, one_index, one_index), &
+        call check_nan(result%variance_mu(WRAP_STEP, ONE_INDEX, ONE_INDEX), &
                        'odd ring: wrapped variance mu')
-        call check_nan(result%mean_sigma2(wrap_step, one_index, one_index), &
+        call check_nan(result%mean_sigma2(WRAP_STEP, ONE_INDEX, ONE_INDEX), &
                        'odd ring: wrapped spatial variance')
     end subroutine test_odd_ring_wrap
 
@@ -72,15 +72,15 @@ contains
         type(Simulator_t) :: sim
         type(SimulationResult_t) :: result
 
-        sim = Simulator(SimulationContext(p_steps=probability_endpoints, q_steps=probability_endpoints, &
-                                          max_steps=wrap_step, grid_size=even_ring_size))
+        sim = Simulator(SimulationContext(p_steps=PROBABILITY_ENDPOINTS, q_steps=PROBABILITY_ENDPOINTS, &
+                                          max_steps=WRAP_STEP, grid_size=EVEN_RING_SIZE))
         result = sim%simulate()
-        call check_close(result%mean_sigma2(second_step, one_index, one_index), &
+        call check_close(result%mean_sigma2(SECOND_STEP, ONE_INDEX, ONE_INDEX), &
                          8.0_real64 / 3.0_real64, &
                          'even ring: variance before wrap')
-        call check(result%survivor_count(wrap_step, one_index, one_index) &
+        call check(result%survivor_count(WRAP_STEP, ONE_INDEX, ONE_INDEX) &
                    == 1_int32, 'even ring: wrapped survivor')
-        call check_nan(result%mean_sigma2(wrap_step, one_index, one_index), &
+        call check_nan(result%mean_sigma2(WRAP_STEP, ONE_INDEX, ONE_INDEX), &
                        'even ring: wrapped spatial variance')
     end subroutine test_even_ring_wrap
 
@@ -89,49 +89,49 @@ contains
         type(SimulationResult_t) :: result
 
         ! At p=q=0, all trials are extinct from k=1 onward.
-        sim = Simulator(SimulationContext(p_steps=probability_endpoints, q_steps=probability_endpoints, &
-                                          max_steps=wrap_step, grid_size=odd_ring_size, &
-                                          simulation_count=deterministic_trials))
+        sim = Simulator(SimulationContext(p_steps=PROBABILITY_ENDPOINTS, q_steps=PROBABILITY_ENDPOINTS, &
+                                          max_steps=WRAP_STEP, grid_size=ODD_RING_SIZE, &
+                                          simulation_count=DETERMINISTIC_TRIALS))
         result = sim%simulate()
-        call check(result%survivor_count(first_step, zero_index, zero_index) &
+        call check(result%survivor_count(FIRST_STEP, ZERO_INDEX, ZERO_INDEX) &
                    == 0_int32, 'extinction: survivor count')
-        call check_close(result%active_count(first_step, zero_index, zero_index), &
+        call check_close(result%active_count(FIRST_STEP, ZERO_INDEX, ZERO_INDEX), &
                          0.0_real64, 'extinction: active count')
-        call check_nan(result%mean_mu(first_step, zero_index, zero_index), &
+        call check_nan(result%mean_mu(FIRST_STEP, ZERO_INDEX, ZERO_INDEX), &
                        'extinction: mean mu')
-        call check_nan(result%mean_mu2(first_step, zero_index, zero_index), &
+        call check_nan(result%mean_mu2(FIRST_STEP, ZERO_INDEX, ZERO_INDEX), &
                        'extinction: mean mu squared')
-        call check_nan(result%variance_mu(first_step, zero_index, zero_index), &
+        call check_nan(result%variance_mu(FIRST_STEP, ZERO_INDEX, ZERO_INDEX), &
                        'extinction: variance mu')
-        call check_nan(result%mean_sigma2(first_step, zero_index, zero_index), &
+        call check_nan(result%mean_sigma2(FIRST_STEP, ZERO_INDEX, ZERO_INDEX), &
                        'extinction: spatial variance')
     end subroutine test_extinction
 
     subroutine test_seeded_reproducibility()
         type(Simulator_t) :: sim
         type(SimulationResult_t) :: first, second
-        integer(int32), parameter :: parameter_points = 3_int32, time_steps = 20_int32
-        integer(int32), parameter :: ring_size = 31_int32, trials = 7_int32
-        integer(int64), parameter :: first_seed = 123456789_int64, second_seed = 987654321_int64
-        integer, parameter :: single_thread = 1, multiple_threads = 4
+        integer(int32), parameter :: PARAMETER_POINTS = 3_int32, TIME_STEPS = 20_int32
+        integer(int32), parameter :: RING_SIZE = 31_int32, TRIALS = 7_int32
+        integer(int64), parameter :: FIRST_SEED = 123456789_int64, SECOND_SEED = 987654321_int64
+        integer, parameter :: SINGLE_THREAD = 1, MULTIPLE_THREADS = 4
 
         ! Parameter points and trials own their streams, independent of scheduling.
-        sim = Simulator(SimulationContext(p_steps=parameter_points, q_steps=parameter_points, &
-                                          max_steps=time_steps, grid_size=ring_size, &
-                                          simulation_count=trials, seed=first_seed))
-        call omp_set_num_threads(single_thread)
+        sim = Simulator(SimulationContext(p_steps=PARAMETER_POINTS, q_steps=PARAMETER_POINTS, &
+                                          max_steps=TIME_STEPS, grid_size=RING_SIZE, &
+                                          simulation_count=TRIALS, seed=FIRST_SEED))
+        call omp_set_num_threads(SINGLE_THREAD)
         first = sim%simulate()
-        call check(first%seed == first_seed, 'seeded simulation: effective seed')
+        call check(first%seed == FIRST_SEED, 'seeded simulation: effective seed')
         second = sim%simulate()
         call check_same_results(first, second)
 
-        call omp_set_num_threads(multiple_threads)
+        call omp_set_num_threads(MULTIPLE_THREADS)
         second = sim%simulate()
         call check_same_results(first, second)
 
-        sim = Simulator(SimulationContext(p_steps=parameter_points, q_steps=parameter_points, &
-                                          max_steps=time_steps, grid_size=ring_size, &
-                                          simulation_count=trials, seed=second_seed))
+        sim = Simulator(SimulationContext(p_steps=PARAMETER_POINTS, q_steps=PARAMETER_POINTS, &
+                                          max_steps=TIME_STEPS, grid_size=RING_SIZE, &
+                                          simulation_count=TRIALS, seed=SECOND_SEED))
         second = sim%simulate()
         call check(any(first%active_count /= second%active_count), &
                    'seeded simulation: different seeds produced the same observations')

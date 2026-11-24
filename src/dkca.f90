@@ -1,7 +1,7 @@
 module model
     use, intrinsic :: iso_fortran_env, only: int32, int64, real64
-    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
-    use random_hash, only: mix_hash
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite, ieee_is_nan, ieee_value, ieee_quiet_nan
+    use random_hash, only: mix_hash, HASH_MODULUS
     implicit none
     private
 
@@ -12,17 +12,17 @@ module model
         integer(kind=int32), allocatable :: initial_state(:)
         integer(kind=int32), allocatable :: next_state(:)
         integer(kind=int32) :: time_step = 0_int32
-        integer(kind=int64) :: rng_state = 1_int64
-        integer(kind=int32), private :: cached_active_count
+        integer(kind=int64) :: seed = 1_int64
+        integer(kind=int32), private :: active_count
         real(real64), private :: cached_center_of_mass, cached_variance
-        logical, private :: center_of_mass_valid = .false., variance_valid = .false.
     contains
         procedure :: reset
-        procedure :: seed_stream
+        procedure :: set_seed
         procedure :: step
         procedure :: current_active_count
         procedure :: current_center_of_mass
         procedure :: current_variance
+        procedure, private :: clear_cache
         procedure, private :: periodic_index
     end type DKCA_t
 
@@ -48,7 +48,8 @@ contains
         dkca%state = initial_state
         dkca%initial_state = initial_state
         dkca%time_step = 0_int32
-        dkca%cached_active_count = sum(initial_state)
+        dkca%active_count = sum(initial_state)
+        call dkca%clear_cache()
     end function init
 
     subroutine reset(dkca)
@@ -56,37 +57,36 @@ contains
 
         dkca%state = dkca%initial_state
         dkca%time_step = 0_int32
-        dkca%cached_active_count = sum(dkca%initial_state)
-        dkca%center_of_mass_valid = .false.
-        dkca%variance_valid = .false.
+        dkca%active_count = sum(dkca%initial_state)
+        call dkca%clear_cache()
     end subroutine reset
 
-    subroutine seed_stream(dkca, stream_key)
+    subroutine set_seed(dkca, seed)
         class(DKCA_t), intent(inout) :: dkca
-        integer(kind=int64), intent(in) :: stream_key
+        integer(kind=int64), intent(in) :: seed
 
-        dkca%rng_state = stream_key
-    end subroutine seed_stream
+        dkca%seed = seed
+    end subroutine set_seed
 
-    function random_unit(time_key, site) result(value)
-        integer(kind=int64), intent(in) :: time_key
+    function random_value(step_seed, site) result(value)
+        integer(kind=int64), intent(in) :: step_seed
         integer(kind=int32), intent(in) :: site
         real(real64) :: value
-        integer(kind=int64) :: bits
+        integer(kind=int64) :: hash_value
 
-        ! Counter-based draws give the same site/time sample on different
+        ! The same site and step give the same value on different
         ! grid sizes until their physical evolution diverges at a boundary.
-        bits = mix_hash(time_key, int(site, int64))
-        value = real(bits, real64) / 2147483647.0_real64
-    end function random_unit
+        hash_value = mix_hash(step_seed, int(site, int64))
+        value = real(hash_value, real64) / real(HASH_MODULUS, real64)
+    end function random_value
 
     subroutine step(dkca, p, q)
         class(DKCA_t), intent(inout) :: dkca
         real(real64), intent(in) :: p, q
 
-        integer(kind=int32) :: j, left, right, next_active_count
-        integer(kind=int64) :: time_key
-        real(real64) :: probability, random_value
+        integer(kind=int32) :: site, left, right, next_active_count
+        integer(kind=int64) :: step_seed
+        real(real64) :: probability, sample
 
         if (.not. ieee_is_finite(p) .or. .not. ieee_is_finite(q)) &
             error stop 'Probabilities p and q must be finite'
@@ -95,10 +95,10 @@ contains
             error stop 'Probabilities p and q must be in [0, 1]'
 
         next_active_count = 0_int32
-        time_key = mix_hash(dkca%rng_state, int(dkca%time_step, int64) + 1_int64)
-        do j = lbound(dkca%state, 1), ubound(dkca%state, 1)
-            left = dkca%state(dkca%periodic_index(j - 1))
-            right = dkca%state(dkca%periodic_index(j + 1))
+        step_seed = mix_hash(dkca%seed, int(dkca%time_step, int64) + 1_int64)
+        do site = lbound(dkca%state, 1), ubound(dkca%state, 1)
+            left = dkca%state(dkca%periodic_index(site - 1))
+            right = dkca%state(dkca%periodic_index(site + 1))
 
             if (left == 0 .and. right == 0) then
                 probability = 0.0_real64
@@ -108,27 +108,26 @@ contains
                 probability = p
             end if
 
-            random_value = random_unit(time_key, j)
-            if (random_value < probability) then
-                dkca%next_state(j) = 1_int32
+            sample = random_value(step_seed, site)
+            if (sample < probability) then
+                dkca%next_state(site) = 1_int32
             else
-                dkca%next_state(j) = 0_int32
+                dkca%next_state(site) = 0_int32
             end if
-            next_active_count = next_active_count + dkca%next_state(j)
+            next_active_count = next_active_count + dkca%next_state(site)
         end do
 
         dkca%state = dkca%next_state
         dkca%time_step = dkca%time_step + 1_int32
-        dkca%cached_active_count = next_active_count
-        dkca%center_of_mass_valid = .false.
-        dkca%variance_valid = .false.
+        dkca%active_count = next_active_count
+        call dkca%clear_cache()
     end subroutine step
 
     function current_active_count(dkca) result(active_count)
         class(DKCA_t), intent(in) :: dkca
         integer(kind=int32) :: active_count
 
-        active_count = dkca%cached_active_count
+        active_count = dkca%active_count
     end function current_active_count
 
     function current_center_of_mass(dkca) result(center_of_mass)
@@ -136,19 +135,18 @@ contains
         real(real64) :: center_of_mass
         integer(kind=int32) :: j
 
-        if (dkca%center_of_mass_valid) then
+        if (.not. ieee_is_nan(dkca%cached_center_of_mass)) then
             center_of_mass = dkca%cached_center_of_mass
             return
         end if
-        if (dkca%cached_active_count == 0_int32) error stop 'Center of mass requires active sites'
+        if (dkca%active_count == 0_int32) error stop 'Center of mass requires active sites'
         center_of_mass = 0.0_real64
         do j = lbound(dkca%state, 1), ubound(dkca%state, 1)
             if (dkca%state(j) == 0_int32) cycle
             center_of_mass = center_of_mass + real(j, real64)
         end do
-        center_of_mass = center_of_mass / real(dkca%cached_active_count, real64)
+        center_of_mass = center_of_mass / real(dkca%active_count, real64)
         dkca%cached_center_of_mass = center_of_mass
-        dkca%center_of_mass_valid = .true.
     end function current_center_of_mass
 
     function current_variance(dkca) result(variance)
@@ -156,7 +154,7 @@ contains
         real(real64) :: variance, mu
         integer(kind=int32) :: j
 
-        if (dkca%variance_valid) then
+        if (.not. ieee_is_nan(dkca%cached_variance)) then
             variance = dkca%cached_variance
             return
         end if
@@ -166,10 +164,17 @@ contains
             if (dkca%state(j) == 0_int32) cycle
             variance = variance + (real(j, real64) - mu)**2
         end do
-        variance = variance / real(dkca%cached_active_count, real64)
+        variance = variance / real(dkca%active_count, real64)
         dkca%cached_variance = variance
-        dkca%variance_valid = .true.
     end function current_variance
+
+    subroutine clear_cache(dkca)
+        class(DKCA_t), intent(inout) :: dkca
+
+        ! Coordinates are integers, so these computed values are always finite.
+        dkca%cached_center_of_mass = ieee_value(0.0_real64, ieee_quiet_nan)
+        dkca%cached_variance = ieee_value(0.0_real64, ieee_quiet_nan)
+    end subroutine clear_cache
 
     function periodic_index(dkca, index) result(wrapped_index)
         class(DKCA_t), intent(in) :: dkca

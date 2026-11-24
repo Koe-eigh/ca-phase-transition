@@ -3,7 +3,7 @@ module simulator_module
     use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
     use omp_lib, only: omp_get_max_threads
     use model, only: DKCA_t, DKCA
-    use random_hash, only: mix_hash
+    use random_hash, only: mix_hash, HASH_MODULUS
     implicit none
     private
 
@@ -172,7 +172,7 @@ contains
                 local_model = sim%model
                 do isim = 1, sim%context%simulation_count
                     call local_model%reset()
-                    call local_model%seed_stream(trial_stream_key(sim%context%seed, ip, iq, isim))
+                    call local_model%set_seed(trial_seed(sim%context%seed, ip, iq, isim))
                     active_count = local_model%current_active_count()
                     simulation_result%active_count(0, ip, iq) = &
                         simulation_result%active_count(0, ip, iq) + &
@@ -230,18 +230,20 @@ contains
         simulation_result%completed_patterns = completed_patterns
     end function simulate
 
-    pure function trial_stream_key(seed, ip, iq, trial) result(key)
+    pure function trial_seed(seed, ip, iq, trial) result(key)
         integer(int64), intent(in) :: seed
         integer(int32), intent(in) :: ip, iq, trial
         integer(int64) :: key
+        integer(int64), parameter :: LOW_31_BITS_MASK = HASH_MODULUS
+        integer, parameter :: SEED_WORD_BITS = 31
 
         ! A stream belongs to the parameter point and trial, not the worker.
-        key = iand(seed, 2147483647_int64) + 1_int64
-        key = mix_hash(key, shiftr(seed, 31))
+        key = iand(seed, LOW_31_BITS_MASK) + 1_int64
+        key = mix_hash(key, shiftr(seed, SEED_WORD_BITS))
         key = mix_hash(key, int(ip, int64))
         key = mix_hash(key, int(iq, int64))
         key = mix_hash(key, int(trial, int64))
-    end function trial_stream_key
+    end function trial_seed
 
     pure function spatial_moments_defined(time_step, grid_size) result(defined)
         integer(int32), intent(in) :: time_step, grid_size
