@@ -1,68 +1,105 @@
 program test_dkca
-    use, intrinsic :: iso_fortran_env, only: int32, int64, real64
+    use, intrinsic :: iso_fortran_env, only: int8, int32, int64, real64
     use test_utils, only: check, check_close
     use dkca, only: DKCA_t, new_DKCA
     implicit none
-    real(real64), parameter :: IMPOSSIBLE = 0.0_real64, CERTAIN = 1.0_real64
-    integer(int32), parameter :: INACTIVE = 0_int32, ACTIVE = 1_int32
+    integer(int8), parameter :: INACTIVE = 0_int8, ACTIVE = 1_int8
 
     call test_initial_state_and_spatial_moments()
     call test_deterministic_transitions()
+    call test_neighbor_transition_probabilities()
+    call test_extinction_is_absorbing()
     call test_large_active_count_with_byte_storage()
     call test_one_site_ring()
     call test_current_state_moments_after_periodic_wrap()
     call test_cached_moments_follow_state_changes()
     call test_random_stream_across_ring_sizes()
+    call test_same_seed_reproduces_trajectory()
+    call test_sampled_transition_probabilities()
     call test_adjacent_random_draws()
 
 contains
     subroutine test_initial_state_and_spatial_moments()
         type(DKCA_t) :: automaton
         real(real64) :: mu, sigma2
-        integer(int32), parameter :: FIRST_COORDINATE = -2_int32
-        integer(int32), parameter :: INITIAL_STATE(*) = [ACTIVE, INACTIVE, INACTIVE, ACTIVE, INACTIVE]
+        integer(int32), parameter :: LEFTMOST_SITE = -2_int32
+        integer(int8), parameter :: INITIAL_STATE(*) = [ACTIVE, INACTIVE, INACTIVE, ACTIVE, INACTIVE]
 
-        automaton = new_DKCA(INITIAL_STATE, first_index=FIRST_COORDINATE)
+        automaton = new_DKCA(INITIAL_STATE, first_index=LEFTMOST_SITE)
         mu = automaton%current_center_of_mass()
         sigma2 = automaton%current_variance()
         call check_close(mu, -0.5_real64, 'initial state: mean coordinate')
         call check_close(sigma2, 2.25_real64, 'initial state: spatial variance')
-        call check(lbound(automaton%state, dim=1) == FIRST_COORDINATE, 'initial state: coordinate origin was lost')
+        call check(lbound(automaton%state, dim=1) == LEFTMOST_SITE, 'initial state: leftmost site changed')
     end subroutine test_initial_state_and_spatial_moments
 
     subroutine test_deterministic_transitions()
         type(DKCA_t) :: automaton
-        integer(int32), parameter :: SINGLE_SEED(*) = [INACTIVE, ACTIVE, INACTIVE, INACTIVE, INACTIVE]
-        integer(int32), parameter :: EXPECTED_NEIGHBORS(*) = [ACTIVE, INACTIVE, ACTIVE, INACTIVE, INACTIVE]
+        integer(int8), parameter :: SINGLE_SEED(*) = [INACTIVE, ACTIVE, INACTIVE, INACTIVE, INACTIVE]
+        integer(int8), parameter :: EXPECTED_NEIGHBORS(*) = [ACTIVE, INACTIVE, ACTIVE, INACTIVE, INACTIVE]
 
         automaton = new_DKCA(SINGLE_SEED)
         call check(automaton%current_active_count() == count(SINGLE_SEED == ACTIVE), &
                    'deterministic transitions: initial active count')
-        call automaton%step(CERTAIN, CERTAIN)
+        call automaton%step(p=1.0_real64, q=1.0_real64)
+        call check(automaton%time_step == 1_int32, 'deterministic transitions: time step after update')
         call check(all(automaton%state == EXPECTED_NEIGHBORS), &
                    'deterministic transitions: certain transition state')
         call check(automaton%current_active_count() == count(EXPECTED_NEIGHBORS == ACTIVE), &
                    'deterministic transitions: certain transition count')
 
         call automaton%reset()
+        call check(all(automaton%state == SINGLE_SEED), 'deterministic transitions: reset state')
+        call check(automaton%time_step == 0_int32, 'deterministic transitions: reset time step')
         call check(automaton%current_active_count() == count(SINGLE_SEED == ACTIVE), &
                    'deterministic transitions: reset active count')
-        call automaton%step(IMPOSSIBLE, IMPOSSIBLE)
+        call automaton%step(p=0.0_real64, q=0.0_real64)
         call check(all(automaton%state == INACTIVE), 'deterministic transitions: impossible transition state')
-        call check(automaton%current_active_count() == INACTIVE, &
+        call check(automaton%current_active_count() == 0_int32, &
                    'deterministic transitions: impossible transition count')
     end subroutine test_deterministic_transitions
+
+    subroutine test_neighbor_transition_probabilities()
+        type(DKCA_t) :: automaton
+        integer(int8), parameter :: INITIAL_STATE(*) = [ACTIVE, ACTIVE, ACTIVE, INACTIVE, INACTIVE, INACTIVE]
+        integer(int8), parameter :: ONLY_TWO_NEIGHBORS(*) = [INACTIVE, ACTIVE, INACTIVE, INACTIVE, INACTIVE, INACTIVE]
+        integer(int8), parameter :: ONLY_ONE_NEIGHBOR(*) = [ACTIVE, INACTIVE, ACTIVE, ACTIVE, INACTIVE, ACTIVE]
+
+        ! The initial ring contains sites with zero, one (on either side), and two active neighbors.
+        automaton = new_DKCA(INITIAL_STATE)
+        call automaton%step(p=0.0_real64, q=1.0_real64)
+        call check(all(automaton%state == ONLY_TWO_NEIGHBORS), 'neighbor rules: q applies to two neighbors')
+
+        call automaton%reset()
+        call automaton%step(p=1.0_real64, q=0.0_real64)
+        call check(all(automaton%state == ONLY_ONE_NEIGHBOR), 'neighbor rules: p applies to one neighbor')
+    end subroutine test_neighbor_transition_probabilities
+
+    subroutine test_extinction_is_absorbing()
+        type(DKCA_t) :: automaton
+        integer(int8), parameter :: ALL_INACTIVE(*) = [INACTIVE, INACTIVE, INACTIVE, INACTIVE, INACTIVE]
+        integer(int32), parameter :: STEPS_AFTER_EXTINCTION = 3_int32
+        integer(int32) :: step_index
+
+        automaton = new_DKCA(ALL_INACTIVE)
+        do step_index = 1, STEPS_AFTER_EXTINCTION
+            call automaton%step(p=1.0_real64, q=1.0_real64)
+            call check(all(automaton%state == INACTIVE), 'extinction: inactive state changed')
+            call check(automaton%current_active_count() == 0_int32, 'extinction: active count changed')
+        end do
+        call check(automaton%time_step == STEPS_AFTER_EXTINCTION, 'extinction: time step did not advance')
+    end subroutine test_extinction_is_absorbing
 
     subroutine test_large_active_count_with_byte_storage()
         type(DKCA_t) :: automaton
         integer(int32), parameter :: RING_SIZE = 256_int32
-        integer(int32) :: full_state(RING_SIZE)
+        integer(int8) :: full_state(RING_SIZE)
 
         full_state = ACTIVE
         automaton = new_DKCA(full_state)
         call check(storage_size(automaton%state(1)) == 8, 'state must use one byte per site')
         call check(automaton%current_active_count() == RING_SIZE, 'byte storage: initial active count')
-        call automaton%step(CERTAIN, CERTAIN)
+        call automaton%step(p=1.0_real64, q=1.0_real64)
         call check(automaton%current_active_count() == RING_SIZE, 'byte storage: active count after step')
         call automaton%reset()
         call check(automaton%current_active_count() == RING_SIZE, 'byte storage: active count after reset')
@@ -72,24 +109,24 @@ contains
         type(DKCA_t) :: automaton
 
         automaton = new_DKCA([ACTIVE])
-        call automaton%step(IMPOSSIBLE, CERTAIN)
-        call check(automaton%current_active_count() == ACTIVE, 'one-site ring: certain transition')
-        call automaton%step(CERTAIN, IMPOSSIBLE)
-        call check(automaton%current_active_count() == INACTIVE, 'one-site ring: impossible transition')
+        call automaton%step(p=0.0_real64, q=1.0_real64)
+        call check(automaton%current_active_count() == 1_int32, 'one-site ring: certain transition')
+        call automaton%step(p=1.0_real64, q=0.0_real64)
+        call check(automaton%current_active_count() == 0_int32, 'one-site ring: impossible transition')
     end subroutine test_one_site_ring
 
     subroutine test_current_state_moments_after_periodic_wrap()
         type(DKCA_t) :: automaton
         real(real64) :: mu, sigma2
-        integer(int32), parameter :: FIRST_COORDINATE = -2_int32
-        integer(int32), parameter :: CENTERED_SEED(*) = [INACTIVE, INACTIVE, ACTIVE, INACTIVE, INACTIVE]
+        integer(int32), parameter :: LEFTMOST_SITE = -2_int32
+        integer(int8), parameter :: CENTERED_SEED(*) = [INACTIVE, INACTIVE, ACTIVE, INACTIVE, INACTIVE]
 
-        automaton = new_DKCA(CENTERED_SEED, first_index=FIRST_COORDINATE)
-        call automaton%step(CERTAIN, CERTAIN)
-        call automaton%step(CERTAIN, CERTAIN)
+        automaton = new_DKCA(CENTERED_SEED, first_index=LEFTMOST_SITE)
+        call automaton%step(p=1.0_real64, q=1.0_real64)
+        call automaton%step(p=1.0_real64, q=1.0_real64)
         sigma2 = automaton%current_variance()
         call check_close(sigma2, 8.0_real64 / 3.0_real64, 'periodic wrap: variance before wrap')
-        call automaton%step(CERTAIN, CERTAIN)
+        call automaton%step(p=1.0_real64, q=1.0_real64)
         mu = automaton%current_center_of_mass()
         sigma2 = automaton%current_variance()
         call check_close(mu, 0.0_real64, 'periodic wrap: current state mean')
@@ -101,16 +138,16 @@ contains
 
     subroutine test_cached_moments_follow_state_changes()
         type(DKCA_t) :: automaton
-        integer(int32), parameter :: FIRST_COORDINATE = -2_int32
+        integer(int32), parameter :: LEFTMOST_SITE = -2_int32
 
         automaton = new_DKCA([ACTIVE, INACTIVE, INACTIVE, INACTIVE, INACTIVE], &
-                         first_index=FIRST_COORDINATE)
+                         first_index=LEFTMOST_SITE)
         ! Read variance first, then both cached properties.
         call check_close(automaton%current_variance(), 0.0_real64, 'cache: initial variance')
         call check_close(automaton%current_center_of_mass(), -2.0_real64, 'cache: initial center')
         call check_close(automaton%current_variance(), 0.0_real64, 'cache: repeated variance')
 
-        call automaton%step(CERTAIN, CERTAIN)
+        call automaton%step(p=1.0_real64, q=1.0_real64)
         call check_close(automaton%current_center_of_mass(), 0.5_real64, 'cache: center after step')
         call check_close(automaton%current_variance(), 2.25_real64, 'cache: variance after step')
 
@@ -125,7 +162,8 @@ contains
         integer(int32), parameter :: STEPS_BEFORE_WRAP = 6_int32
         integer(int64), parameter :: SHARED_SEED = 42_int64
         real(real64), parameter :: P_ONE_NEIGHBOR = 0.7_real64, Q_TWO_NEIGHBORS = 0.4_real64
-        integer(int32) :: small_state(-SMALL_RADIUS:SMALL_RADIUS), large_state(-LARGE_RADIUS:LARGE_RADIUS), step_index
+        integer(int8) :: small_state(-SMALL_RADIUS:SMALL_RADIUS), large_state(-LARGE_RADIUS:LARGE_RADIUS)
+        integer(int32) :: step_index
 
         small_state = INACTIVE
         large_state = INACTIVE
@@ -136,12 +174,77 @@ contains
         call small%set_seed(SHARED_SEED)
         call large%set_seed(SHARED_SEED)
         do step_index = 1, STEPS_BEFORE_WRAP
-            call small%step(P_ONE_NEIGHBOR, Q_TWO_NEIGHBORS)
-            call large%step(P_ONE_NEIGHBOR, Q_TWO_NEIGHBORS)
+            call small%step(p=P_ONE_NEIGHBOR, q=Q_TWO_NEIGHBORS)
+            call large%step(p=P_ONE_NEIGHBOR, q=Q_TWO_NEIGHBORS)
             call check(all(small%state == large%state(-SMALL_RADIUS:SMALL_RADIUS)), &
                        'random stream: matching sites diverged before periodic wrap')
         end do
     end subroutine test_random_stream_across_ring_sizes
+
+    subroutine test_same_seed_reproduces_trajectory()
+        type(DKCA_t) :: first, second
+        integer(int32), parameter :: RING_SIZE = 31_int32, STEPS = 8_int32
+        integer(int64), parameter :: SHARED_SEED = 12345_int64
+        integer(int8) :: initial_state(RING_SIZE)
+        integer(int32) :: step_index
+
+        initial_state = ACTIVE
+        first = new_DKCA(initial_state)
+        second = new_DKCA(initial_state)
+        call first%set_seed(SHARED_SEED)
+        call second%set_seed(SHARED_SEED)
+        do step_index = 1, STEPS
+            call first%step(p=0.7_real64, q=0.6_real64)
+            call second%step(p=0.7_real64, q=0.6_real64)
+            call check(all(first%state == second%state), 'same seed: trajectories differ')
+        end do
+        call first%reset()
+        do step_index = 1, STEPS
+            call first%step(p=0.7_real64, q=0.6_real64)
+        end do
+        call check(all(first%state == second%state), 'same seed: reset did not reproduce trajectory')
+    end subroutine test_same_seed_reproduces_trajectory
+
+    subroutine test_sampled_transition_probabilities()
+        type(DKCA_t) :: automaton
+        integer(int32), parameter :: RING_SIZE = 400_int32, TRIAL_COUNT = 20_int32
+        integer(int32), parameter :: PATTERN_LENGTH = 4_int32, ACTIVE_PREFIX_LENGTH = 2_int32
+        integer(int64), parameter :: BASE_SEED = 200_int64
+        real(real64), parameter :: P = 0.25_real64, Q = 0.75_real64
+        real(real64), parameter :: MAX_FRACTION_ERROR = 0.05_real64
+        integer(int8) :: initial_state(RING_SIZE)
+        integer(int32) :: trial, site, total_active
+        real(real64) :: observed_fraction
+
+        ! Every site in a repeating 1100 ring has exactly one active neighbor.
+        do site = 1, RING_SIZE
+            initial_state(site) = merge(ACTIVE, INACTIVE, &
+                                        mod(site - 1, PATTERN_LENGTH) < ACTIVE_PREFIX_LENGTH)
+        end do
+        automaton = new_DKCA(initial_state)
+        total_active = 0_int32
+        do trial = 1, TRIAL_COUNT
+            call automaton%reset()
+            call automaton%set_seed(BASE_SEED + int(trial, int64))
+            call automaton%step(p=P, q=0.0_real64)
+            total_active = total_active + automaton%current_active_count()
+        end do
+        observed_fraction = real(total_active, real64) / real(TRIAL_COUNT * RING_SIZE, real64)
+        call check(abs(observed_fraction - P) <= MAX_FRACTION_ERROR, 'sampled transitions: p frequency')
+
+        ! Every site in a full ring has two active neighbors.
+        initial_state = ACTIVE
+        automaton = new_DKCA(initial_state)
+        total_active = 0_int32
+        do trial = 1, TRIAL_COUNT
+            call automaton%reset()
+            call automaton%set_seed(BASE_SEED + int(trial, int64))
+            call automaton%step(p=0.0_real64, q=Q)
+            total_active = total_active + automaton%current_active_count()
+        end do
+        observed_fraction = real(total_active, real64) / real(TRIAL_COUNT * RING_SIZE, real64)
+        call check(abs(observed_fraction - Q) <= MAX_FRACTION_ERROR, 'sampled transitions: q frequency')
+    end subroutine test_sampled_transition_probabilities
 
     subroutine test_adjacent_random_draws()
         type(DKCA_t) :: automaton
@@ -149,7 +252,8 @@ contains
         integer(int32), parameter :: PATTERN_LENGTH = 4_int32, ACTIVE_PREFIX_LENGTH = 2_int32
         integer(int64), parameter :: BASE_SEED = 42_int64
         real(real64), parameter :: HALF_PROBABILITY = 0.5_real64, MAX_ABS_CORRELATION = 0.1_real64
-        integer(int32) :: mixed_state(RING_SIZE), trial, site
+        integer(int8) :: mixed_state(RING_SIZE)
+        integer(int32) :: trial, site
         real(real64) :: adjacent_correlation
 
         ! Each site in the 1100 pattern has one active neighbor.
@@ -161,7 +265,7 @@ contains
         do trial = 1, TRIAL_COUNT
             call automaton%reset()
             call automaton%set_seed(BASE_SEED + int(trial, int64))
-            call automaton%step(HALF_PROBABILITY, HALF_PROBABILITY)
+            call automaton%step(p=HALF_PROBABILITY, q=HALF_PROBABILITY)
             do site = 1, size(mixed_state)
                 adjacent_correlation = adjacent_correlation + &
                     real((2 * automaton%state(site) - 1) * &

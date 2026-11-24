@@ -31,13 +31,13 @@ module dkca
     end interface new_DKCA
 contains
     function init(initial_state, first_index) result(dkca)
-        integer(kind=int32), intent(in) :: initial_state(:)
+        integer(kind=int8), intent(in) :: initial_state(:)
         integer(kind=int32), intent(in), optional :: first_index
         type(DKCA_t) :: dkca
         integer(kind=int32) :: first
 
         if (size(initial_state) == 0) error stop 'Initial state must be nonempty'
-        if (any(initial_state /= 0_int32 .and. initial_state /= 1_int32)) &
+        if (any(initial_state /= 0_int8 .and. initial_state /= 1_int8)) &
             error stop 'Initial state must contain only 0 and 1'
 
         first = 1_int32
@@ -45,10 +45,10 @@ contains
         allocate(dkca%state(first:first + size(initial_state) - 1))
         allocate(dkca%initial_state(first:first + size(initial_state) - 1))
         allocate(dkca%next_state(first:first + size(initial_state) - 1))
-        dkca%state = int(initial_state, int8)
-        dkca%initial_state = int(initial_state, int8)
+        dkca%state = initial_state
+        dkca%initial_state = initial_state
         dkca%time_step = 0_int32
-        dkca%active_count = count(initial_state == 1_int32, kind=int32)
+        dkca%active_count = count(initial_state == 1_int8, kind=int32)
         call dkca%clear_cache()
     end function init
 
@@ -158,6 +158,7 @@ contains
             variance = dkca%cached_variance
             return
         end if
+        if (dkca%active_count == 0_int32) error stop 'Variance requires active sites'
         mu = dkca%current_center_of_mass()
         variance = 0.0_real64
         do j = lbound(dkca%state, dim=1), ubound(dkca%state, dim=1)

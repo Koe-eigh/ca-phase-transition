@@ -1,5 +1,5 @@
 module simulator_module
-    use, intrinsic :: iso_fortran_env, only: int32, int64, real64, output_unit
+    use, intrinsic :: iso_fortran_env, only: int8, int32, int64, real64, output_unit
     use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
     use omp_lib, only: omp_get_max_threads
     use dkca, only: DKCA_t, new_DKCA
@@ -96,7 +96,7 @@ contains
         type(SimulationContext_t), intent(in) :: context
         type(Simulator_t) :: sim
 
-        integer(kind=int32), allocatable :: initial_state(:)
+        integer(kind=int8), allocatable :: initial_state(:)
         integer(kind=int32) :: lb, rb
         if (mod(context%grid_size, 2) .eq. 0) then
             lb = -(context%grid_size / 2)
@@ -106,8 +106,8 @@ contains
             rb = context%grid_size / 2
         end if
         allocate(initial_state(lb:rb))
-        initial_state = 0_int32
-        initial_state(0) = 1_int32
+        initial_state = 0_int8
+        initial_state(0) = 1_int8
 
         sim%context = context
         sim%model = new_DKCA(initial_state, lb)

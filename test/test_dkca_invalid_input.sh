@@ -8,25 +8,45 @@ trap 'rm -r "$work_dir"' 0
 
 cat > "$work_dir/invalid_input.f90" <<'EOF'
 program invalid_input
-    use, intrinsic :: iso_fortran_env, only: int32, real64
+    use, intrinsic :: iso_fortran_env, only: int8, real64
     use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan, &
                                             ieee_positive_inf, ieee_negative_inf
     use dkca, only: DKCA_t, new_DKCA
     implicit none
     type(DKCA_t) :: automaton
     character(len=32) :: input_case
-    real(real64) :: p, q
+    real(real64) :: p, q, observed
 
     call get_command_argument(1, input_case)
     select case (trim(input_case))
     case ('empty')
-        automaton = new_DKCA([integer(int32) :: ])
+        automaton = new_DKCA([integer(int8) :: ])
     case ('negative_state')
-        automaton = new_DKCA([-1_int32, 0_int32])
+        automaton = new_DKCA([-1_int8, 0_int8])
     case ('state_above_one')
-        automaton = new_DKCA([1_int32, 2_int32])
+        automaton = new_DKCA([1_int8, 2_int8])
+    case ('max_int8_state')
+        automaton = new_DKCA([127_int8])
+    case ('min_int8_state')
+        automaton = new_DKCA([int(-128, int8)])
+    case ('empty_center')
+        automaton = new_DKCA([0_int8])
+        observed = automaton%current_center_of_mass()
+    case ('empty_variance')
+        automaton = new_DKCA([0_int8])
+        observed = automaton%current_variance()
+    case ('extinct_center')
+        automaton = new_DKCA([1_int8])
+        observed = automaton%current_center_of_mass()
+        call automaton%step(0.0_real64, 0.0_real64)
+        observed = automaton%current_center_of_mass()
+    case ('extinct_variance')
+        automaton = new_DKCA([1_int8])
+        observed = automaton%current_variance()
+        call automaton%step(0.0_real64, 0.0_real64)
+        observed = automaton%current_variance()
     case default
-        automaton = new_DKCA([1_int32])
+        automaton = new_DKCA([1_int8])
         p = 0.5_real64
         q = 0.5_real64
         select case (trim(input_case))
@@ -77,6 +97,12 @@ check_rejected() {
 check_rejected empty 'Initial state must be nonempty'
 check_rejected negative_state 'Initial state must contain only 0 and 1'
 check_rejected state_above_one 'Initial state must contain only 0 and 1'
+check_rejected max_int8_state 'Initial state must contain only 0 and 1'
+check_rejected min_int8_state 'Initial state must contain only 0 and 1'
+check_rejected empty_center 'Center of mass requires active sites'
+check_rejected empty_variance 'Variance requires active sites'
+check_rejected extinct_center 'Center of mass requires active sites'
+check_rejected extinct_variance 'Variance requires active sites'
 for input_case in negative_p large_p negative_q large_q; do
     check_rejected "$input_case" 'Probabilities p and q must be in [0, 1]'
 done
