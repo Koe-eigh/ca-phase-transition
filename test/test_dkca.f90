@@ -26,7 +26,7 @@ contains
         sigma2 = automaton%current_variance()
         call check_close(mu, -0.5_real64, 'initial state: mean coordinate')
         call check_close(sigma2, 2.25_real64, 'initial state: spatial variance')
-        call check(lbound(automaton%state, 1) == FIRST_COORDINATE, 'initial state: coordinate origin was lost')
+        call check(lbound(automaton%state, dim=1) == FIRST_COORDINATE, 'initial state: coordinate origin was lost')
     end subroutine test_initial_state_and_spatial_moments
 
     subroutine test_deterministic_transitions()

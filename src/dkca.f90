@@ -96,7 +96,7 @@ contains
 
         next_active_count = 0_int32
         step_seed = mix_hash(dkca%seed, int(dkca%time_step, int64) + 1_int64)
-        do site = lbound(dkca%state, 1), ubound(dkca%state, 1)
+        do site = lbound(dkca%state, dim=1), ubound(dkca%state, dim=1)
             left = dkca%state(dkca%periodic_index(site - 1))
             right = dkca%state(dkca%periodic_index(site + 1))
 
@@ -141,7 +141,7 @@ contains
         end if
         if (dkca%active_count == 0_int32) error stop 'Center of mass requires active sites'
         center_of_mass = 0.0_real64
-        do j = lbound(dkca%state, 1), ubound(dkca%state, 1)
+        do j = lbound(dkca%state, dim=1), ubound(dkca%state, dim=1)
             if (dkca%state(j) == 0_int32) cycle
             center_of_mass = center_of_mass + real(j, real64)
         end do
@@ -160,7 +160,7 @@ contains
         end if
         mu = dkca%current_center_of_mass()
         variance = 0.0_real64
-        do j = lbound(dkca%state, 1), ubound(dkca%state, 1)
+        do j = lbound(dkca%state, dim=1), ubound(dkca%state, dim=1)
             if (dkca%state(j) == 0_int32) cycle
             variance = variance + (real(j, real64) - mu)**2
         end do
@@ -182,7 +182,7 @@ contains
         integer(kind=int32) :: wrapped_index
         integer(kind=int32) :: first, n
 
-        first = lbound(dkca%state, 1)
+        first = lbound(dkca%state, dim=1)
         n = int(size(dkca%state), kind=int32)
         wrapped_index = first + modulo(index - first, n)
     end function periodic_index
