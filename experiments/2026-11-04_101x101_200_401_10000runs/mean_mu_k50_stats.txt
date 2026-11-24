@@ -1,0 +1,9 @@
+snapshot_step: 50
+grid_size: 401
+simulation_count: 10000
+seed: 1793750561739309000
+minimum_survivor_fraction: 0.5
+defined_parameter_points: 2911
+mean_mu: -1.2201050063535149e-03
+rms_mu: 7.3850632951437276e-02
+max_abs_mu: 5.0495085991900668e-01
