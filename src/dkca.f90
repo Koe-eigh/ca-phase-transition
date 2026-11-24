@@ -13,12 +13,16 @@ module model
         integer(kind=int32), allocatable :: next_state(:)
         integer(kind=int32) :: time_step = 0_int32
         integer(kind=int64) :: rng_state = 1_int64
+        integer(kind=int32), private :: cached_active_count
+        real(real64), private :: cached_center_of_mass, cached_variance
+        logical, private :: center_of_mass_valid = .false., variance_valid = .false.
     contains
         procedure :: reset
         procedure :: seed_stream
         procedure :: step
         procedure :: current_active_count
-        procedure :: current_spatial_moments
+        procedure :: current_center_of_mass
+        procedure :: current_variance
         procedure, private :: periodic_index
     end type DKCA_t
 
@@ -44,6 +48,7 @@ contains
         dkca%state = initial_state
         dkca%initial_state = initial_state
         dkca%time_step = 0_int32
+        dkca%cached_active_count = sum(initial_state)
     end function init
 
     subroutine reset(dkca)
@@ -51,6 +56,9 @@ contains
 
         dkca%state = dkca%initial_state
         dkca%time_step = 0_int32
+        dkca%cached_active_count = sum(dkca%initial_state)
+        dkca%center_of_mass_valid = .false.
+        dkca%variance_valid = .false.
     end subroutine reset
 
     subroutine seed_stream(dkca, stream_key)
@@ -72,10 +80,9 @@ contains
         value = real(bits, real64) / 2147483647.0_real64
     end function random_unit
 
-    subroutine step(dkca, p, q, active_count)
+    subroutine step(dkca, p, q)
         class(DKCA_t), intent(inout) :: dkca
         real(real64), intent(in) :: p, q
-        integer(kind=int32), intent(out), optional :: active_count
 
         integer(kind=int32) :: j, left, right, next_active_count
         integer(kind=int64) :: time_key
@@ -112,35 +119,57 @@ contains
 
         dkca%state = dkca%next_state
         dkca%time_step = dkca%time_step + 1_int32
-        if (present(active_count)) active_count = next_active_count
+        dkca%cached_active_count = next_active_count
+        dkca%center_of_mass_valid = .false.
+        dkca%variance_valid = .false.
     end subroutine step
 
     function current_active_count(dkca) result(active_count)
         class(DKCA_t), intent(in) :: dkca
         integer(kind=int32) :: active_count
 
-        active_count = sum(dkca%state)
+        active_count = dkca%cached_active_count
     end function current_active_count
 
-    subroutine current_spatial_moments(dkca, mu, sigma2)
-        class(DKCA_t), intent(in) :: dkca
-        real(real64), intent(out) :: mu, sigma2
-        integer(kind=int32) :: j, active_count
+    function current_center_of_mass(dkca) result(center_of_mass)
+        class(DKCA_t), intent(inout) :: dkca
+        real(real64) :: center_of_mass
+        integer(kind=int32) :: j
 
-        active_count = dkca%current_active_count()
-        if (active_count <= 0_int32) error stop 'Spatial moments require active sites'
-        mu = 0.0_real64
+        if (dkca%center_of_mass_valid) then
+            center_of_mass = dkca%cached_center_of_mass
+            return
+        end if
+        if (dkca%cached_active_count == 0_int32) error stop 'Center of mass requires active sites'
+        center_of_mass = 0.0_real64
         do j = lbound(dkca%state, 1), ubound(dkca%state, 1)
-            if (dkca%state(j) /= 0_int32) mu = mu + real(j, real64)
+            if (dkca%state(j) == 0_int32) cycle
+            center_of_mass = center_of_mass + real(j, real64)
         end do
-        mu = mu / real(active_count, real64)
+        center_of_mass = center_of_mass / real(dkca%cached_active_count, real64)
+        dkca%cached_center_of_mass = center_of_mass
+        dkca%center_of_mass_valid = .true.
+    end function current_center_of_mass
 
-        sigma2 = 0.0_real64
+    function current_variance(dkca) result(variance)
+        class(DKCA_t), intent(inout) :: dkca
+        real(real64) :: variance, mu
+        integer(kind=int32) :: j
+
+        if (dkca%variance_valid) then
+            variance = dkca%cached_variance
+            return
+        end if
+        mu = dkca%current_center_of_mass()
+        variance = 0.0_real64
         do j = lbound(dkca%state, 1), ubound(dkca%state, 1)
-            if (dkca%state(j) /= 0_int32) sigma2 = sigma2 + (real(j, real64) - mu)**2
+            if (dkca%state(j) == 0_int32) cycle
+            variance = variance + (real(j, real64) - mu)**2
         end do
-        sigma2 = sigma2 / real(active_count, real64)
-    end subroutine current_spatial_moments
+        variance = variance / real(dkca%cached_active_count, real64)
+        dkca%cached_variance = variance
+        dkca%variance_valid = .true.
+    end function current_variance
 
     function periodic_index(dkca, index) result(wrapped_index)
         class(DKCA_t), intent(in) :: dkca

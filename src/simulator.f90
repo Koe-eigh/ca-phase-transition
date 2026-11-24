@@ -179,8 +179,8 @@ contains
                         real(active_count, real64)
                     call accumulate_moments(local_model, simulation_result, 0_int32, ip, iq, active_count)
                     do it = 1, sim%context%max_steps
-                        call local_model%step(sim%context%p_values(ip), sim%context%q_values(iq), &
-                                              active_count)
+                        call local_model%step(sim%context%p_values(ip), sim%context%q_values(iq))
+                        active_count = local_model%current_active_count()
                         simulation_result%active_count(it, ip, iq) = &
                             simulation_result%active_count(it, ip, iq) + &
                             real(active_count, real64)
@@ -252,7 +252,7 @@ contains
     end function spatial_moments_defined
 
     subroutine accumulate_moments(local_model, simulation_result, time_step, ip, iq, active_count)
-        type(DKCA_t), intent(in) :: local_model
+        type(DKCA_t), intent(inout) :: local_model
         type(SimulationResult_t), intent(inout) :: simulation_result
         integer(kind=int32), intent(in) :: time_step, ip, iq, active_count
         real(real64) :: mu, sigma2
@@ -261,7 +261,8 @@ contains
         simulation_result%survivor_count(time_step, ip, iq) = &
             simulation_result%survivor_count(time_step, ip, iq) + 1_int32
         if (.not. spatial_moments_defined(time_step, size(local_model%state, kind=int32))) return
-        call local_model%current_spatial_moments(mu, sigma2)
+        mu = local_model%current_center_of_mass()
+        sigma2 = local_model%current_variance()
         simulation_result%mean_mu(time_step, ip, iq) = simulation_result%mean_mu(time_step, ip, iq) + mu
         simulation_result%mean_mu2(time_step, ip, iq) = simulation_result%mean_mu2(time_step, ip, iq) + mu**2
         simulation_result%mean_sigma2(time_step, ip, iq) = &
