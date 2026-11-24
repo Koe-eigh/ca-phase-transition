@@ -1,7 +1,7 @@
 program test_dkca
     use, intrinsic :: iso_fortran_env, only: int32, int64, real64
     use test_utils, only: check, check_close
-    use model, only: DKCA_t, DKCA
+    use dkca, only: DKCA_t, new_DKCA
     implicit none
     real(real64), parameter :: IMPOSSIBLE = 0.0_real64, CERTAIN = 1.0_real64
     integer(int32), parameter :: INACTIVE = 0_int32, ACTIVE = 1_int32
@@ -21,7 +21,7 @@ contains
         integer(int32), parameter :: FIRST_COORDINATE = -2_int32
         integer(int32), parameter :: INITIAL_STATE(*) = [ACTIVE, INACTIVE, INACTIVE, ACTIVE, INACTIVE]
 
-        automaton = DKCA(INITIAL_STATE, first_index=FIRST_COORDINATE)
+        automaton = new_DKCA(INITIAL_STATE, first_index=FIRST_COORDINATE)
         mu = automaton%current_center_of_mass()
         sigma2 = automaton%current_variance()
         call check_close(mu, -0.5_real64, 'initial state: mean coordinate')
@@ -34,7 +34,7 @@ contains
         integer(int32), parameter :: SINGLE_SEED(*) = [INACTIVE, ACTIVE, INACTIVE, INACTIVE, INACTIVE]
         integer(int32), parameter :: EXPECTED_NEIGHBORS(*) = [ACTIVE, INACTIVE, ACTIVE, INACTIVE, INACTIVE]
 
-        automaton = DKCA(SINGLE_SEED)
+        automaton = new_DKCA(SINGLE_SEED)
         call check(automaton%current_active_count() == count(SINGLE_SEED == ACTIVE), &
                    'deterministic transitions: initial active count')
         call automaton%step(CERTAIN, CERTAIN)
@@ -55,7 +55,7 @@ contains
     subroutine test_one_site_ring()
         type(DKCA_t) :: automaton
 
-        automaton = DKCA([ACTIVE])
+        automaton = new_DKCA([ACTIVE])
         call automaton%step(IMPOSSIBLE, CERTAIN)
         call check(automaton%current_active_count() == ACTIVE, 'one-site ring: certain transition')
         call automaton%step(CERTAIN, IMPOSSIBLE)
@@ -68,7 +68,7 @@ contains
         integer(int32), parameter :: FIRST_COORDINATE = -2_int32
         integer(int32), parameter :: CENTERED_SEED(*) = [INACTIVE, INACTIVE, ACTIVE, INACTIVE, INACTIVE]
 
-        automaton = DKCA(CENTERED_SEED, first_index=FIRST_COORDINATE)
+        automaton = new_DKCA(CENTERED_SEED, first_index=FIRST_COORDINATE)
         call automaton%step(CERTAIN, CERTAIN)
         call automaton%step(CERTAIN, CERTAIN)
         sigma2 = automaton%current_variance()
@@ -87,7 +87,7 @@ contains
         type(DKCA_t) :: automaton
         integer(int32), parameter :: FIRST_COORDINATE = -2_int32
 
-        automaton = DKCA([ACTIVE, INACTIVE, INACTIVE, INACTIVE, INACTIVE], &
+        automaton = new_DKCA([ACTIVE, INACTIVE, INACTIVE, INACTIVE, INACTIVE], &
                          first_index=FIRST_COORDINATE)
         ! Read variance first, then both cached properties.
         call check_close(automaton%current_variance(), 0.0_real64, 'cache: initial variance')
@@ -115,8 +115,8 @@ contains
         large_state = INACTIVE
         small_state(0) = ACTIVE
         large_state(0) = ACTIVE
-        small = DKCA(small_state, first_index=-SMALL_RADIUS)
-        large = DKCA(large_state, first_index=-LARGE_RADIUS)
+        small = new_DKCA(small_state, first_index=-SMALL_RADIUS)
+        large = new_DKCA(large_state, first_index=-LARGE_RADIUS)
         call small%set_seed(SHARED_SEED)
         call large%set_seed(SHARED_SEED)
         do step_index = 1, STEPS_BEFORE_WRAP
@@ -140,7 +140,7 @@ contains
         do site = 1, size(mixed_state)
             mixed_state(site) = merge(ACTIVE, INACTIVE, mod(site - 1, PATTERN_LENGTH) < ACTIVE_PREFIX_LENGTH)
         end do
-        automaton = DKCA(mixed_state)
+        automaton = new_DKCA(mixed_state)
         adjacent_correlation = 0.0_real64
         do trial = 1, TRIAL_COUNT
             call automaton%reset()

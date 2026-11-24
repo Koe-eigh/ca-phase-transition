@@ -1,11 +1,11 @@
-module model
+module dkca
     use, intrinsic :: iso_fortran_env, only: int32, int64, real64
     use, intrinsic :: ieee_arithmetic, only: ieee_is_finite, ieee_is_nan, ieee_value, ieee_quiet_nan
     use random_hash, only: mix_hash, HASH_MODULUS
     implicit none
     private
 
-    public :: DKCA_t, DKCA
+    public :: DKCA_t, new_DKCA
 
     type :: DKCA_t
         integer(kind=int32), allocatable :: state(:)
@@ -26,9 +26,9 @@ module model
         procedure, private :: periodic_index
     end type DKCA_t
 
-    interface DKCA
+    interface new_DKCA
         module procedure init
-    end interface DKCA
+    end interface new_DKCA
 contains
     function init(initial_state, first_index) result(dkca)
         integer(kind=int32), intent(in) :: initial_state(:)
@@ -187,4 +187,4 @@ contains
         wrapped_index = first + modulo(index - first, n)
     end function periodic_index
 
-end module model
+end module dkca

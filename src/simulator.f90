@@ -2,7 +2,7 @@ module simulator_module
     use, intrinsic :: iso_fortran_env, only: int32, int64, real64, output_unit
     use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
     use omp_lib, only: omp_get_max_threads
-    use model, only: DKCA_t, DKCA
+    use dkca, only: DKCA_t, new_DKCA
     use random_hash, only: mix_hash, HASH_MODULUS
     implicit none
     private
@@ -110,7 +110,7 @@ contains
         initial_state(0) = 1_int32
 
         sim%context = context
-        sim%model = DKCA(initial_state, lb)
+        sim%model = new_DKCA(initial_state, lb)
     end function init
 
     function simulate(sim) result(simulation_result)

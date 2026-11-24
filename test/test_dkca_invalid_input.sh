@@ -11,7 +11,7 @@ program invalid_input
     use, intrinsic :: iso_fortran_env, only: int32, real64
     use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan, &
                                             ieee_positive_inf, ieee_negative_inf
-    use model, only: DKCA_t, DKCA
+    use dkca, only: DKCA_t, new_DKCA
     implicit none
     type(DKCA_t) :: automaton
     character(len=32) :: input_case
@@ -20,13 +20,13 @@ program invalid_input
     call get_command_argument(1, input_case)
     select case (trim(input_case))
     case ('empty')
-        automaton = DKCA([integer(int32) :: ])
+        automaton = new_DKCA([integer(int32) :: ])
     case ('negative_state')
-        automaton = DKCA([-1_int32, 0_int32])
+        automaton = new_DKCA([-1_int32, 0_int32])
     case ('state_above_one')
-        automaton = DKCA([1_int32, 2_int32])
+        automaton = new_DKCA([1_int32, 2_int32])
     case default
-        automaton = DKCA([1_int32])
+        automaton = new_DKCA([1_int32])
         p = 0.5_real64
         q = 0.5_real64
         select case (trim(input_case))
