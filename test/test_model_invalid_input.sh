@@ -59,7 +59,8 @@ end program invalid_input
 EOF
 
 (cd "$work_dir" && gfortran -std=f2018 -J "$work_dir" -I "$work_dir" \
-    "$project_dir/src/model.f90" invalid_input.f90 -o invalid_input)
+    "$project_dir/src/random_hash.f90" "$project_dir/src/dkca.f90" \
+    invalid_input.f90 -o invalid_input)
 
 check_rejected() {
     if "$work_dir/invalid_input" "$1" > "$work_dir/output" 2>&1; then

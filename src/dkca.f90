@@ -1,6 +1,7 @@
 module model
     use, intrinsic :: iso_fortran_env, only: int32, int64, real64
-    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite, ieee_value, ieee_quiet_nan
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    use random_hash, only: mix_hash
     implicit none
     private
 
@@ -18,7 +19,6 @@ module model
         procedure :: step
         procedure :: current_active_count
         procedure :: current_spatial_moments
-        procedure :: spatial_moments_defined
         procedure, private :: periodic_index
     end type DKCA_t
 
@@ -53,34 +53,12 @@ contains
         dkca%time_step = 0_int32
     end subroutine reset
 
-    subroutine seed_stream(dkca, seed, ip, iq, trial)
+    subroutine seed_stream(dkca, stream_key)
         class(DKCA_t), intent(inout) :: dkca
-        integer(kind=int64), intent(in) :: seed
-        integer(kind=int32), intent(in) :: ip, iq, trial
+        integer(kind=int64), intent(in) :: stream_key
 
-        ! Build a key tied to the work, rather than to its OpenMP worker.
-        dkca%rng_state = iand(seed, 2147483647_int64) + 1_int64
-        dkca%rng_state = mix_hash(dkca%rng_state, shiftr(seed, 31))
-        dkca%rng_state = mix_hash(dkca%rng_state, int(ip, int64))
-        dkca%rng_state = mix_hash(dkca%rng_state, int(iq, int64))
-        dkca%rng_state = mix_hash(dkca%rng_state, int(trial, int64))
+        dkca%rng_state = stream_key
     end subroutine seed_stream
-
-    function mix_hash(state, value) result(mixed)
-        integer(kind=int64), intent(in) :: state, value
-        integer(kind=int64) :: mixed
-        integer :: round
-
-        ! Interleave xor shifts with modular multiplication so nearby site
-        ! coordinates do not become an arithmetic progression of draws.
-        ! All products fit in int64; signed overflow is not required.
-        mixed = modulo(state + modulo(value, 2147483647_int64), 2147483647_int64)
-        do round = 1, 4
-            mixed = ieor(mixed, shiftr(mixed, 16 - round))
-            mixed = modulo(48271_int64 * mixed, 2147483647_int64)
-        end do
-        if (mixed == 0_int64) mixed = 1_int64
-    end function mix_hash
 
     function random_unit(time_key, site) result(value)
         integer(kind=int64), intent(in) :: time_key
@@ -144,18 +122,13 @@ contains
         active_count = sum(dkca%state)
     end function current_active_count
 
-    subroutine current_spatial_moments(dkca, active_count, mu, sigma2)
+    subroutine current_spatial_moments(dkca, mu, sigma2)
         class(DKCA_t), intent(in) :: dkca
-        integer(kind=int32), intent(in) :: active_count
         real(real64), intent(out) :: mu, sigma2
-        integer(kind=int32) :: j
+        integer(kind=int32) :: j, active_count
 
+        active_count = dkca%current_active_count()
         if (active_count <= 0_int32) error stop 'Spatial moments require active sites'
-        if (.not. dkca%spatial_moments_defined()) then
-            mu = ieee_value(0.0_real64, ieee_quiet_nan)
-            sigma2 = ieee_value(0.0_real64, ieee_quiet_nan)
-            return
-        end if
         mu = 0.0_real64
         do j = lbound(dkca%state, 1), ubound(dkca%state, 1)
             if (dkca%state(j) /= 0_int32) mu = mu + real(j, real64)
@@ -168,14 +141,6 @@ contains
         end do
         sigma2 = sigma2 / real(active_count, real64)
     end subroutine current_spatial_moments
-
-    function spatial_moments_defined(dkca) result(defined)
-        class(DKCA_t), intent(in) :: dkca
-        logical :: defined
-
-        ! A single seed can first wrap around the ring after ceil(n / 2) steps.
-        defined = dkca%time_step < (size(dkca%state) + 1) / 2
-    end function spatial_moments_defined
 
     function periodic_index(dkca, index) result(wrapped_index)
         class(DKCA_t), intent(in) :: dkca

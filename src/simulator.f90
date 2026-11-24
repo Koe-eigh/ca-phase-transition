@@ -3,6 +3,7 @@ module simulator_module
     use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
     use omp_lib, only: omp_get_max_threads
     use model, only: DKCA_t, DKCA
+    use random_hash, only: mix_hash
     implicit none
     private
 
@@ -171,7 +172,7 @@ contains
                 local_model = sim%model
                 do isim = 1, sim%context%simulation_count
                     call local_model%reset()
-                    call local_model%seed_stream(sim%context%seed, ip, iq, isim)
+                    call local_model%seed_stream(trial_stream_key(sim%context%seed, ip, iq, isim))
                     active_count = local_model%current_active_count()
                     simulation_result%active_count(0, ip, iq) = &
                         simulation_result%active_count(0, ip, iq) + &
@@ -194,7 +195,7 @@ contains
                     real(sim%context%simulation_count, real64)
                 do it = 0, sim%context%max_steps
                     if (simulation_result%survivor_count(it, ip, iq) == 0_int32 .or. &
-                        it >= (sim%context%grid_size + 1_int32) / 2_int32) then
+                        .not. spatial_moments_defined(it, sim%context%grid_size)) then
                         simulation_result%mean_mu(it, ip, iq) = ieee_value(0.0_real64, ieee_quiet_nan)
                         simulation_result%mean_mu2(it, ip, iq) = ieee_value(0.0_real64, ieee_quiet_nan)
                         simulation_result%variance_mu(it, ip, iq) = ieee_value(0.0_real64, ieee_quiet_nan)
@@ -229,6 +230,27 @@ contains
         simulation_result%completed_patterns = completed_patterns
     end function simulate
 
+    pure function trial_stream_key(seed, ip, iq, trial) result(key)
+        integer(int64), intent(in) :: seed
+        integer(int32), intent(in) :: ip, iq, trial
+        integer(int64) :: key
+
+        ! A stream belongs to the parameter point and trial, not the worker.
+        key = iand(seed, 2147483647_int64) + 1_int64
+        key = mix_hash(key, shiftr(seed, 31))
+        key = mix_hash(key, int(ip, int64))
+        key = mix_hash(key, int(iq, int64))
+        key = mix_hash(key, int(trial, int64))
+    end function trial_stream_key
+
+    pure function spatial_moments_defined(time_step, grid_size) result(defined)
+        integer(int32), intent(in) :: time_step, grid_size
+        logical :: defined
+
+        ! A single seed can first wrap around the ring after ceil(n / 2) steps.
+        defined = time_step < (grid_size + 1_int32) / 2_int32
+    end function spatial_moments_defined
+
     subroutine accumulate_moments(local_model, simulation_result, time_step, ip, iq, active_count)
         type(DKCA_t), intent(in) :: local_model
         type(SimulationResult_t), intent(inout) :: simulation_result
@@ -238,8 +260,8 @@ contains
         if (active_count == 0_int32) return
         simulation_result%survivor_count(time_step, ip, iq) = &
             simulation_result%survivor_count(time_step, ip, iq) + 1_int32
-        if (.not. local_model%spatial_moments_defined()) return
-        call local_model%current_spatial_moments(active_count, mu, sigma2)
+        if (.not. spatial_moments_defined(time_step, size(local_model%state, kind=int32))) return
+        call local_model%current_spatial_moments(mu, sigma2)
         simulation_result%mean_mu(time_step, ip, iq) = simulation_result%mean_mu(time_step, ip, iq) + mu
         simulation_result%mean_mu2(time_step, ip, iq) = simulation_result%mean_mu2(time_step, ip, iq) + mu**2
         simulation_result%mean_sigma2(time_step, ip, iq) = &
