@@ -110,7 +110,7 @@ contains
         initial_state(0) = 1_int8
 
         sim%context = context
-        sim%model = new_DKCA(initial_state, lb)
+        sim%model = new_DKCA(initial_state=initial_state, first_index=lb)
     end function init
 
     function simulate(sim) result(simulation_result)

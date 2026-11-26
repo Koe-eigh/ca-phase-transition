@@ -25,7 +25,7 @@ contains
         integer(int32), parameter :: LEFTMOST_SITE = -2_int32
         integer(int8), parameter :: INITIAL_STATE(*) = [ACTIVE, INACTIVE, INACTIVE, ACTIVE, INACTIVE]
 
-        automaton = new_DKCA(INITIAL_STATE, first_index=LEFTMOST_SITE)
+        automaton = new_DKCA(initial_state=INITIAL_STATE, first_index=LEFTMOST_SITE)
         mu = automaton%current_center_of_mass()
         sigma2 = automaton%current_variance()
         call check_close(mu, -0.5_real64, 'initial state: mean coordinate')
@@ -35,23 +35,24 @@ contains
 
     subroutine test_deterministic_transitions()
         type(DKCA_t) :: automaton
-        integer(int8), parameter :: SINGLE_SEED(*) = [INACTIVE, ACTIVE, INACTIVE, INACTIVE, INACTIVE]
-        integer(int8), parameter :: EXPECTED_NEIGHBORS(*) = [ACTIVE, INACTIVE, ACTIVE, INACTIVE, INACTIVE]
+        integer(int8), parameter :: ONLY_ONE_SITE_ACTIVE_CONFIGURATION(*) = &
+            [INACTIVE, ACTIVE, INACTIVE, INACTIVE, INACTIVE]
+        integer(int8), parameter :: EXPECTED_CONFIGURATION(*) = [ACTIVE, INACTIVE, ACTIVE, INACTIVE, INACTIVE]
 
-        automaton = new_DKCA(SINGLE_SEED)
-        call check(automaton%current_active_count() == count(SINGLE_SEED == ACTIVE), &
+        automaton = new_DKCA(initial_state=ONLY_ONE_SITE_ACTIVE_CONFIGURATION)
+        call check(automaton%current_active_count() == count(ONLY_ONE_SITE_ACTIVE_CONFIGURATION == ACTIVE), &
                    'deterministic transitions: initial active count')
         call automaton%step(p=1.0_real64, q=1.0_real64)
         call check(automaton%time_step == 1_int32, 'deterministic transitions: time step after update')
-        call check(all(automaton%state == EXPECTED_NEIGHBORS), &
+        call check(all(automaton%state == EXPECTED_CONFIGURATION), &
                    'deterministic transitions: certain transition state')
-        call check(automaton%current_active_count() == count(EXPECTED_NEIGHBORS == ACTIVE), &
+        call check(automaton%current_active_count() == count(EXPECTED_CONFIGURATION == ACTIVE), &
                    'deterministic transitions: certain transition count')
 
         call automaton%reset()
-        call check(all(automaton%state == SINGLE_SEED), 'deterministic transitions: reset state')
+        call check(all(automaton%state == ONLY_ONE_SITE_ACTIVE_CONFIGURATION), 'deterministic transitions: reset state')
         call check(automaton%time_step == 0_int32, 'deterministic transitions: reset time step')
-        call check(automaton%current_active_count() == count(SINGLE_SEED == ACTIVE), &
+        call check(automaton%current_active_count() == count(ONLY_ONE_SITE_ACTIVE_CONFIGURATION == ACTIVE), &
                    'deterministic transitions: reset active count')
         call automaton%step(p=0.0_real64, q=0.0_real64)
         call check(all(automaton%state == INACTIVE), 'deterministic transitions: impossible transition state')
@@ -66,7 +67,7 @@ contains
         integer(int8), parameter :: ONLY_ONE_NEIGHBOR(*) = [ACTIVE, INACTIVE, ACTIVE, ACTIVE, INACTIVE, ACTIVE]
 
         ! The initial ring contains sites with zero, one (on either side), and two active neighbors.
-        automaton = new_DKCA(INITIAL_STATE)
+        automaton = new_DKCA(initial_state=INITIAL_STATE)
         call automaton%step(p=0.0_real64, q=1.0_real64)
         call check(all(automaton%state == ONLY_TWO_NEIGHBORS), 'neighbor rules: q applies to two neighbors')
 
@@ -81,7 +82,7 @@ contains
         integer(int32), parameter :: STEPS_AFTER_EXTINCTION = 3_int32
         integer(int32) :: step_index
 
-        automaton = new_DKCA(ALL_INACTIVE)
+        automaton = new_DKCA(initial_state=ALL_INACTIVE)
         do step_index = 1, STEPS_AFTER_EXTINCTION
             call automaton%step(p=1.0_real64, q=1.0_real64)
             call check(all(automaton%state == INACTIVE), 'extinction: inactive state changed')
@@ -96,7 +97,7 @@ contains
         integer(int8) :: full_state(RING_SIZE)
 
         full_state = ACTIVE
-        automaton = new_DKCA(full_state)
+        automaton = new_DKCA(initial_state=full_state)
         call check(storage_size(automaton%state(1)) == 8, 'state must use one byte per site')
         call check(automaton%current_active_count() == RING_SIZE, 'byte storage: initial active count')
         call automaton%step(p=1.0_real64, q=1.0_real64)
@@ -108,7 +109,7 @@ contains
     subroutine test_one_site_ring()
         type(DKCA_t) :: automaton
 
-        automaton = new_DKCA([ACTIVE])
+        automaton = new_DKCA(initial_state=[ACTIVE])
         call automaton%step(p=0.0_real64, q=1.0_real64)
         call check(automaton%current_active_count() == 1_int32, 'one-site ring: certain transition')
         call automaton%step(p=1.0_real64, q=0.0_real64)
@@ -121,7 +122,7 @@ contains
         integer(int32), parameter :: LEFTMOST_SITE = -2_int32
         integer(int8), parameter :: CENTERED_SEED(*) = [INACTIVE, INACTIVE, ACTIVE, INACTIVE, INACTIVE]
 
-        automaton = new_DKCA(CENTERED_SEED, first_index=LEFTMOST_SITE)
+        automaton = new_DKCA(initial_state=CENTERED_SEED, first_index=LEFTMOST_SITE)
         call automaton%step(p=1.0_real64, q=1.0_real64)
         call automaton%step(p=1.0_real64, q=1.0_real64)
         sigma2 = automaton%current_variance()
@@ -140,7 +141,7 @@ contains
         type(DKCA_t) :: automaton
         integer(int32), parameter :: LEFTMOST_SITE = -2_int32
 
-        automaton = new_DKCA([ACTIVE, INACTIVE, INACTIVE, INACTIVE, INACTIVE], &
+        automaton = new_DKCA(initial_state=[ACTIVE, INACTIVE, INACTIVE, INACTIVE, INACTIVE], &
                          first_index=LEFTMOST_SITE)
         ! Read variance first, then both cached properties.
         call check_close(automaton%current_variance(), 0.0_real64, 'cache: initial variance')
@@ -169,8 +170,8 @@ contains
         large_state = INACTIVE
         small_state(0) = ACTIVE
         large_state(0) = ACTIVE
-        small = new_DKCA(small_state, first_index=-SMALL_RADIUS)
-        large = new_DKCA(large_state, first_index=-LARGE_RADIUS)
+        small = new_DKCA(initial_state=small_state, first_index=-SMALL_RADIUS)
+        large = new_DKCA(initial_state=large_state, first_index=-LARGE_RADIUS)
         call small%set_seed(SHARED_SEED)
         call large%set_seed(SHARED_SEED)
         do step_index = 1, STEPS_BEFORE_WRAP
@@ -189,8 +190,8 @@ contains
         integer(int32) :: step_index
 
         initial_state = ACTIVE
-        first = new_DKCA(initial_state)
-        second = new_DKCA(initial_state)
+        first = new_DKCA(initial_state=initial_state)
+        second = new_DKCA(initial_state=initial_state)
         call first%set_seed(SHARED_SEED)
         call second%set_seed(SHARED_SEED)
         do step_index = 1, STEPS
@@ -221,7 +222,7 @@ contains
             initial_state(site) = merge(ACTIVE, INACTIVE, &
                                         mod(site - 1, PATTERN_LENGTH) < ACTIVE_PREFIX_LENGTH)
         end do
-        automaton = new_DKCA(initial_state)
+        automaton = new_DKCA(initial_state=initial_state)
         total_active = 0_int32
         do trial = 1, TRIAL_COUNT
             call automaton%reset()
@@ -234,7 +235,7 @@ contains
 
         ! Every site in a full ring has two active neighbors.
         initial_state = ACTIVE
-        automaton = new_DKCA(initial_state)
+        automaton = new_DKCA(initial_state=initial_state)
         total_active = 0_int32
         do trial = 1, TRIAL_COUNT
             call automaton%reset()
@@ -260,7 +261,7 @@ contains
         do site = 1, size(mixed_state)
             mixed_state(site) = merge(ACTIVE, INACTIVE, mod(site - 1, PATTERN_LENGTH) < ACTIVE_PREFIX_LENGTH)
         end do
-        automaton = new_DKCA(mixed_state)
+        automaton = new_DKCA(initial_state=mixed_state)
         adjacent_correlation = 0.0_real64
         do trial = 1, TRIAL_COUNT
             call automaton%reset()
